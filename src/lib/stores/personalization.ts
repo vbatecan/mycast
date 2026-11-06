@@ -39,10 +39,12 @@ const categories = new Set<CommandCategory>([
   'Preferences',
   'Calculator',
   'Files',
+  'Windows',
 ]);
 const validKey = (key: unknown): key is string =>
   typeof key === 'string' &&
   (builtinKeys.has(key) ||
+    /^windows:[a-z0-9-]+$/.test(key) ||
     /^app:v1:[a-f0-9]{64}$/.test(key) ||
     /^file:v1:[a-f0-9]{32}$/.test(key));
 const aliasIdentity = (alias: string) => alias.normalize('NFC').toLowerCase();

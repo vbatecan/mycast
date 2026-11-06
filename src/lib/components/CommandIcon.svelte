@@ -1,6 +1,7 @@
 <script lang="ts">
   import {
     AppWindow,
+    Globe,
     FileText,
     Calculator,
     FolderOpen,
@@ -43,6 +44,7 @@
     'app-window': AppWindow,
     'file-text': FileText,
     terminal: Terminal,
+    globe: Globe,
   };
   let Icon = $derived(icons[name] ?? AppWindow);
   let element = $state<HTMLSpanElement>();

@@ -16,9 +16,12 @@ export type CommandCategory =
   | 'Quick Actions'
   | 'Preferences'
   | 'Calculator'
-  | 'Files';
+  | 'Files'
+  | 'Windows';
 
 export type CommandAction =
+  | { type: 'web-search'; url: string }
+  | { type: 'windows'; id: string }
   | { type: 'native'; name: NativeAction }
   | { type: 'view'; view: 'settings' | 'about' | 'appearance' }
   | { type: 'calculator-mode' }
@@ -28,7 +31,7 @@ export type CommandAction =
   | { type: 'copy'; text: string };
 
 export interface Command {
-  module?: 'calculator' | 'currency';
+  module?: 'calculator' | 'currency' | 'web-search' | 'windows';
   canRunAsAdmin?: boolean;
   id: string;
   /** Stable, non-executable identity; absent on ephemeral calculator results. */

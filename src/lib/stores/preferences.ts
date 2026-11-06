@@ -1,3 +1,4 @@
+import { validSearchTemplate, type SearchEngine } from '../commands/web';
 import { writable } from 'svelte/store';
 import {
   defaultShortcuts,
@@ -7,6 +8,9 @@ import {
 } from '../shortcuts';
 
 export interface Preferences {
+  searchEngine: SearchEngine;
+  customSearchUrl: string;
+  animationSpeed: number;
   animations: boolean;
   showDescriptions: boolean;
   density: 'comfortable' | 'compact';
@@ -32,6 +36,9 @@ export const windowMaterials: WindowMaterial[] = [
 
 const storageKey = 'mycast.preferences.v1';
 const defaults: Preferences = {
+  searchEngine: 'google',
+  customSearchUrl: 'https://www.google.com/search?q={query}',
+  animationSpeed: 1,
   animations: true,
   showDescriptions: true,
   density: 'comfortable',
@@ -49,6 +56,21 @@ function validated(value: unknown): Preferences {
   if (!value || typeof value !== 'object') return { ...defaults };
   const candidate = value as Partial<Preferences>;
   return {
+    searchEngine: ['google', 'bing', 'duckduckgo', 'custom'].includes(
+      candidate.searchEngine ?? '',
+    )
+      ? candidate.searchEngine!
+      : 'google',
+    customSearchUrl:
+      typeof candidate.customSearchUrl === 'string' &&
+      validSearchTemplate(candidate.customSearchUrl)
+        ? candidate.customSearchUrl
+        : defaults.customSearchUrl,
+    animationSpeed:
+      typeof candidate.animationSpeed === 'number' &&
+      Number.isFinite(candidate.animationSpeed)
+        ? Math.min(2, Math.max(0.25, candidate.animationSpeed))
+        : 1,
     shortcutDefaultsVersion: 2,
     shortcuts: validateShortcuts(candidate.shortcuts),
     recentLimit:

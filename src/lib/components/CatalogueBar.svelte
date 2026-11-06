@@ -80,8 +80,8 @@
     font-size: var(--text-10);
     border-radius: 5px;
     transition:
-      color 120ms,
-      background 120ms;
+      color calc(120ms * var(--motion-scale, 1)),
+      background calc(120ms * var(--motion-scale, 1));
   }
   .scopes button.active {
     color: var(--text);

@@ -2,19 +2,22 @@ use std::{
     collections::BTreeMap,
     sync::{
         Mutex,
-        atomic::{AtomicU8, Ordering},
+        atomic::{AtomicU16, Ordering},
     },
 };
 use tauri::{AppHandle, Manager, State};
-pub const IDS: [&str; 6] = [
+pub const IDS: [&str; 9] = [
     "applications",
     "files",
     "run",
     "calculator",
     "currency",
     "utilities",
+    "web-search",
+    "ai",
+    "windows",
 ];
-static ENABLED: AtomicU8 = AtomicU8::new(63);
+static ENABLED: AtomicU16 = AtomicU16::new(u16::MAX >> (16 - IDS.len()));
 pub struct Modules {
     pub values: Mutex<BTreeMap<String, bool>>,
 }

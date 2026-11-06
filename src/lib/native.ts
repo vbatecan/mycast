@@ -29,6 +29,13 @@ export interface ApplicationCatalogue {
   warnings: string[];
 }
 
+export const listWindowsCommands = (): Promise<
+  import('./types/command').Command[]
+> => nativeInvoke('list_windows_commands');
+export const openWindowsCommand = (id: string): Promise<string> =>
+  nativeInvoke('open_windows_command', { id });
+export const openSearchUrl = (url: string): Promise<string> =>
+  nativeInvoke('open_search_url', { url });
 export const isNative = (): boolean => isTauri();
 
 async function nativeInvoke<T>(

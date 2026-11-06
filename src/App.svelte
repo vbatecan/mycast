@@ -46,6 +46,10 @@
       '--text-scale',
       String($preferences.textSize / 100),
     );
+    document.documentElement.style.setProperty(
+      '--motion-scale',
+      String(1 / $preferences.animationSpeed),
+    );
     document.documentElement.dataset.density = $preferences.density;
     document.documentElement.style.setProperty(
       '--window-opacity',

@@ -1,3 +1,4 @@
+mod ai;
 mod appearance;
 mod applications;
 mod calculator;
@@ -6,6 +7,7 @@ mod elevation;
 mod files;
 mod launcher;
 mod modules;
+mod search;
 
 use tauri::{
     AppHandle, Emitter, Manager, PhysicalPosition, WindowEvent,
@@ -107,6 +109,7 @@ pub fn run() {
                 .build(),
         )
         .setup(|app| {
+            app.manage(ai::AiState::default());
             app.manage(modules::Modules::load(app.handle()));
             app.manage(applications::ApplicationCatalog::default());
             app.manage(files::FileIndex::new(app.handle()));
@@ -168,6 +171,14 @@ pub fn run() {
             _ => {}
         })
         .invoke_handler(tauri::generate_handler![
+            ai::open_ai_link,
+            ai::get_ai_config,
+            ai::save_ai_config,
+            ai::ask_ai,
+            ai::cancel_ai,
+            search::list_windows_commands,
+            search::open_windows_command,
+            search::open_search_url,
             modules::get_modules,
             modules::set_module,
             calculator::evaluate_math,

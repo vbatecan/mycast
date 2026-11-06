@@ -1,5 +1,7 @@
 import {
   copyText,
+  openWindowsCommand,
+  openSearchUrl,
   executeNative,
   launchApplication,
   fileAction,
@@ -44,6 +46,10 @@ export async function executeCommand(
     };
   }
   switch (action.type) {
+    case 'windows':
+      return { type: 'message', message: await openWindowsCommand(action.id) };
+    case 'web-search':
+      return { type: 'message', message: await openSearchUrl(action.url) };
     case 'file':
       return {
         type: 'message',

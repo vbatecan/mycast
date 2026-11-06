@@ -1,4 +1,8 @@
 <script lang="ts">
+  import AiPanel from './AiPanel.svelte';
+  import { clearAi } from '../stores/ai';
+  import { webResult } from '../commands/web';
+  import { loadWindowsCommands } from '../stores/applications';
   import { onMount, tick, untrack } from 'svelte';
   import { listen } from '@tauri-apps/api/event';
   import {
@@ -81,6 +85,21 @@
   let fileSearchError = $state('');
   let fileSearching = $state(false);
   let requestSequence = Date.now() * 1000;
+  let aiPanel = $state<{ submit: () => void }>();
+  let aiMode = $derived($modules.ai && query.trimStart().startsWith('??'));
+  $effect(() => {
+    if (!shown || view !== 'palette' || !aiMode) void clearAi();
+  });
+  let webMode = $derived(
+    !aiMode &&
+      !query.trimStart().startsWith('??') &&
+      $modules['web-search'] &&
+      query.trimStart().startsWith('?'),
+  );
+  $effect(() => {
+    if ($modulesReady && $modules.windows && shown)
+      void loadWindowsCommands().catch((error) => notify(String(error), true));
+  });
   let runMode = $derived($modules.run && query.trimStart().startsWith('>'));
   let runText = $derived(runMode ? query.trimStart().slice(1).trimStart() : '');
   let messageTimer: ReturnType<typeof setTimeout> | undefined;
@@ -119,6 +138,8 @@
       shown &&
       view === 'palette' &&
       !runMode &&
+      !webMode &&
+      !aiMode &&
       !['applications', 'favorites', 'recents', 'files'].includes(scope);
     const math = $modules.calculator;
     const currency = $modules.currency;
@@ -218,6 +239,13 @@
       scope === 'favorites' || scope === 'recents' ? scope : ('all' as const),
   });
   let results = $derived.by((): Command[] => {
+    if (aiMode) return [];
+    if (webMode)
+      return webResult(
+        query,
+        $preferences.searchEngine,
+        $preferences.customSearchUrl,
+      );
     if (runMode)
       return [
         {
@@ -256,6 +284,8 @@
       shown &&
       view === 'palette' &&
       !runMode &&
+      !webMode &&
+      !aiMode &&
       ['all', 'files', 'favorites', 'recents'].includes(selectedScope);
     const requestId = ++requestSequence;
     untrack(() => {
@@ -381,7 +411,9 @@
           notify(String(error), true);
         }
       },
-      $preferences.animations && !reducedMotion ? 110 : 0,
+      $preferences.animations && !reducedMotion
+        ? 110 / $preferences.animationSpeed
+        : 0,
     );
   }
   async function execute(
@@ -409,6 +441,8 @@
           command.action.type === 'application' ||
           command.action.type === 'file' ||
           command.action.type === 'run' ||
+          command.action.type === 'windows' ||
+          command.action.type === 'web-search' ||
           (command.action.type === 'native' &&
             !command.action.name.startsWith('copy-'))
         )
@@ -502,7 +536,8 @@
       input?.focus();
     } else if (view === 'palette' && action === 'open' && !event.repeat) {
       event.preventDefault();
-      if (results[selectedIndex]) void execute(results[selectedIndex]);
+      if (aiMode) aiPanel?.submit();
+      else if (results[selectedIndex]) void execute(results[selectedIndex]);
     }
   }
   onMount(() => {
@@ -601,6 +636,9 @@
       onkeydown={handleKeys}
     />
     <CatalogueBar {scope} onselect={selectScope} />
+    {#if webMode}<div class="file-search-status" role="status">
+        Type ? followed by search terms · Enter opens your default browser
+      </div>{/if}
     {#if runMode}<div class="file-search-status">
         Run in a visible PowerShell terminal · {shortcutLabel(
           $preferences.shortcuts.open,
@@ -631,7 +669,11 @@
         >
       </div>
     {/if}
-    {#if calculation.kind === 'error' && !results.length}
+    {#if aiMode}<AiPanel
+        bind:this={aiPanel}
+        prompt={query.trimStart().slice(2)}
+      />
+    {:else if calculation.kind === 'error' && !results.length}
       <div class="calculation-error" role="status">
         <CircleAlert size={16} />
         <div>
@@ -680,17 +722,23 @@
         {#if message}{#if isError}<CircleAlert size={12} />{:else}<Check
               size={12}
             />{/if}<span>{message}</span>
-        {:else}<div class="hint">
-            <span class="arrow-pair"
-              >{shortcutLabel($preferences.shortcuts.previousItem)}
-              {shortcutLabel($preferences.shortcuts.nextItem)}</span
-            > Navigate
-          </div>
+        {:else}{#if !aiMode}<div class="hint">
+              <span class="arrow-pair"
+                >{shortcutLabel($preferences.shortcuts.previousItem)}
+                {shortcutLabel($preferences.shortcuts.nextItem)}</span
+              > Navigate
+            </div>{/if}
           <div class="hint">
             <KeyboardHint
               keys={shortcutLabel($preferences.shortcuts.open).split('+')}
             />
-            {runMode ? 'Run' : calculation.kind === 'success' ? 'Copy' : 'Open'}
+            {aiMode
+              ? 'Ask AI'
+              : runMode
+                ? 'Run'
+                : calculation.kind === 'success'
+                  ? 'Copy'
+                  : 'Open'}
           </div>
           {#if platform === 'windows' && (selectedCommand?.canRunAsAdmin || (selectedCommand?.action.type === 'native' && selectedCommand.action.name === 'notepad'))}
             <div class="hint">
@@ -735,10 +783,10 @@
     box-shadow: var(--window-edge);
     border: 1px solid var(--border);
     border-radius: 12px;
-    animation: enter 150ms ease-out;
+    animation: enter calc(150ms * var(--motion-scale, 1)) ease-out;
     transition:
-      opacity 110ms,
-      transform 110ms;
+      opacity calc(110ms * var(--motion-scale, 1)),
+      transform calc(110ms * var(--motion-scale, 1));
   }
   .file-search-status {
     padding: 4px 23px;
@@ -860,7 +908,7 @@
     display: grid;
     place-items: center;
     color: var(--muted);
-    transition: color 120ms;
+    transition: color calc(120ms * var(--motion-scale, 1));
   }
   .preferences-button:hover {
     color: var(--text);

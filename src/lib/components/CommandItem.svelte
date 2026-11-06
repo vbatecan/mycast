@@ -87,8 +87,8 @@
     border-radius: 8px;
     cursor: pointer;
     transition:
-      background 120ms,
-      border-color 120ms;
+      background calc(120ms * var(--motion-scale, 1)),
+      border-color calc(120ms * var(--motion-scale, 1));
   }
   .command-row:hover {
     background: var(--hover);

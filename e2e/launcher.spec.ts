@@ -98,6 +98,10 @@ test('settings tabs, toggles, persistence and Escape back work', async ({
   await page.getByRole('tab', { name: 'General', exact: true }).focus();
   await page.keyboard.press('ArrowRight');
   await expect(
+    page.getByRole('tab', { name: 'Search', exact: true }),
+  ).toHaveAttribute('aria-selected', 'true');
+  await page.keyboard.press('ArrowRight');
+  await expect(
     page.getByRole('tab', { name: 'Commands', exact: true }),
   ).toHaveAttribute('aria-selected', 'true');
   await page.keyboard.press('ArrowRight');

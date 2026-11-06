@@ -19,16 +19,20 @@
     bind:this={input}
     bind:value
     {onkeydown}
-    aria-label="Search apps, commands, or files; use > to run PowerShell"
+    aria-label="Search apps, commands, or files; use ?? for AI, ? for web search or > to run PowerShell"
     role="combobox"
     aria-autocomplete="list"
     aria-expanded="true"
     aria-controls="command-results"
     aria-activedescendant={activeId}
-    placeholder="Search apps, commands, files… or > to run"
+    placeholder="Search apps, commands, files… ? web or > run"
     autocomplete="off"
     spellcheck="false"
-    maxlength={value.trimStart().startsWith('>') ? 8193 : 512}
+    maxlength={value.trimStart().startsWith('??')
+      ? 16000
+      : value.trimStart().startsWith('>')
+        ? 8193
+        : 512}
   />
   {#if value}
     <button

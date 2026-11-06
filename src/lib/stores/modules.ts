@@ -3,6 +3,21 @@ import { invoke, isTauri } from '@tauri-apps/api/core';
 import type { Command } from '../types/command';
 export const moduleDefinitions = [
   [
+    'ai',
+    'AI assistant',
+    'Ask with ?? using your own API key or a local model.',
+  ],
+  [
+    'web-search',
+    'Web search',
+    'Search the web with ? in your default browser.',
+  ],
+  [
+    'windows',
+    'Windows settings and tools',
+    'Find Windows settings and system tools.',
+  ],
+  [
     'applications',
     'Applications',
     'Installed application discovery and launching.',

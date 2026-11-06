@@ -1,5 +1,5 @@
 import { derived, get, writable } from 'svelte/store';
-import { isNative, listApplications } from '../native';
+import { isNative, listApplications, listWindowsCommands } from '../native';
 import type { InstalledApplication } from '../native';
 import type { Command } from '../types/command';
 import { modules, initializeModules } from './modules';
@@ -114,7 +114,21 @@ export function mergeCatalogue(installed: readonly Command[]): Command[] {
   ];
 }
 
-export const commandCatalogue = derived(installedCommands, mergeCatalogue);
+export const windowsCommands = writable<Command[]>([]);
+let windowsPending: Promise<void> | undefined;
+export function loadWindowsCommands(): Promise<void> {
+  if (!isNative()) return Promise.resolve();
+  return (windowsPending ??= listWindowsCommands()
+    .then(windowsCommands.set)
+    .catch((error) => {
+      windowsPending = undefined;
+      throw error;
+    }));
+}
+export const commandCatalogue = derived(
+  [installedCommands, windowsCommands],
+  ([installed, windows]) => [...mergeCatalogue(installed), ...windows],
+);
 
 export function unloadApplications() {
   invalidateApplicationIcons();

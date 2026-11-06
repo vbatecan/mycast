@@ -1,4 +1,6 @@
 <script lang="ts">
+  import AiSettings from './AiSettings.svelte';
+  import SearchSettings from './SearchSettings.svelte';
   import ModuleSettings from './ModuleSettings.svelte';
   import UpdateSettings from './UpdateSettings.svelte';
   import WindowEffects from './WindowEffects.svelte';
@@ -45,6 +47,7 @@
   } = $props();
 
   type Tab =
+    | 'Search'
     | 'General'
     | 'Commands'
     | 'Files & Run'
@@ -52,16 +55,19 @@
     | 'Shortcuts'
     | 'Modules'
     | 'Updates'
+    | 'AI'
     | 'About';
   const tabId = (tab: Tab) => tab.toLowerCase().replace(/[^a-z0-9]+/g, '-');
   const tabs: Tab[] = [
     'General',
+    'Search',
     'Commands',
     'Files & Run',
     'Appearance',
     'Shortcuts',
     'Modules',
     'Updates',
+    'AI',
     'About',
   ];
   let active: Tab = $state(
@@ -270,6 +276,10 @@
             }))}
         />
       </div>
+    {:else if active === 'AI'}
+      <AiSettings />
+    {:else if active === 'Search'}
+      <SearchSettings />
     {:else if active === 'Modules'}
       <ModuleSettings />
     {:else if active === 'Updates'}
@@ -349,6 +359,25 @@
             onclick={() => toggle('animations')}><span></span></button
           >
         </div>
+        <div class="setting-row">
+          <label for="animation-speed"
+            >Animation speed · {$preferences.animationSpeed}×</label
+          >
+          <input
+            id="animation-speed"
+            type="range"
+            min="0.25"
+            max="2"
+            step="0.25"
+            value={$preferences.animationSpeed}
+            disabled={!$preferences.animations}
+            oninput={(event) =>
+              preferences.update((value) => ({
+                ...value,
+                animationSpeed: event.currentTarget.valueAsNumber,
+              }))}
+          />
+        </div>
         <p class="quiet-note">
           <Sparkles size={13} strokeWidth={1.5} /> System reduced motion preferences
           are always respected.
@@ -415,7 +444,7 @@
     display: flex;
     flex-direction: column;
     color: var(--text);
-    animation: settings-enter 160ms ease-out;
+    animation: settings-enter calc(160ms * var(--motion-scale, 1)) ease-out;
   }
   @keyframes settings-enter {
     from {
@@ -448,8 +477,8 @@
     background: transparent;
     cursor: pointer;
     transition:
-      background 120ms,
-      color 120ms;
+      background calc(120ms * var(--motion-scale, 1)),
+      color calc(120ms * var(--motion-scale, 1));
   }
   .back-button:hover {
     background: var(--hover);
@@ -492,7 +521,7 @@
     font: inherit;
     font-size: var(--text-12);
     cursor: pointer;
-    transition: color 120ms;
+    transition: color calc(120ms * var(--motion-scale, 1));
   }
   .tabs button:hover {
     color: var(--text);
@@ -578,7 +607,7 @@
     background: var(--selected);
     border: 0;
     cursor: pointer;
-    transition: background 130ms;
+    transition: background calc(130ms * var(--motion-scale, 1));
   }
   .switch span {
     width: 14px;
@@ -587,8 +616,8 @@
     background: var(--secondary);
     box-shadow: 0 1px 2px #0003;
     transition:
-      transform 130ms,
-      background 130ms;
+      transform calc(130ms * var(--motion-scale, 1)),
+      background calc(130ms * var(--motion-scale, 1));
   }
   .switch.enabled {
     background: var(--accent);

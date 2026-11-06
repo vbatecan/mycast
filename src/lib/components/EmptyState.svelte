@@ -21,7 +21,7 @@
     justify-content: center;
     flex-direction: column;
     padding: 25px;
-    animation: appear 150ms ease-out;
+    animation: appear calc(150ms * var(--motion-scale, 1)) ease-out;
   }
   .empty-icon {
     display: grid;

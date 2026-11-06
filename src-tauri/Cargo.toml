@@ -1,6 +1,6 @@
 [package]
 name = "mycast"
-version = "0.1.1"
+version = "0.2.0"
 description = "A small, keyboard-first Windows command launcher"
 authors = ["Mycast contributors"]
 edition = "2024"
@@ -28,6 +28,9 @@ notify = "8"
 unicode-normalization = "0.1"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 uuid = { version = "1", features = ["v4"] }
+fend-core = "1.5.9"
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
 
 [target.'cfg(windows)'.dependencies]
 window-vibrancy = "0.8.1"

@@ -1,4 +1,6 @@
 <script lang="ts">
+  import ModuleSettings from './ModuleSettings.svelte';
+  import UpdateSettings from './UpdateSettings.svelte';
   import WindowEffects from './WindowEffects.svelte';
   import ShortcutSettings from './ShortcutSettings.svelte';
   import { shortcutLabel } from '../shortcuts';
@@ -35,7 +37,7 @@
       mode?: import('../native').LaunchMode,
     ) => Promise<void>;
     onback: () => void;
-    initialSection?: 'settings' | 'about' | 'appearance';
+    initialSection?: 'settings' | 'about' | 'appearance' | 'updates';
     shortcut: string | null;
     shortcutError: string | null;
     version: string;
@@ -48,6 +50,8 @@
     | 'Files & Run'
     | 'Appearance'
     | 'Shortcuts'
+    | 'Modules'
+    | 'Updates'
     | 'About';
   const tabId = (tab: Tab) => tab.toLowerCase().replace(/[^a-z0-9]+/g, '-');
   const tabs: Tab[] = [
@@ -56,15 +60,19 @@
     'Files & Run',
     'Appearance',
     'Shortcuts',
+    'Modules',
+    'Updates',
     'About',
   ];
   let active: Tab = $state(
     untrack(() =>
-      initialSection === 'about'
-        ? 'About'
-        : initialSection === 'appearance'
-          ? 'Appearance'
-          : 'General',
+      initialSection === 'updates'
+        ? 'Updates'
+        : initialSection === 'about'
+          ? 'About'
+          : initialSection === 'appearance'
+            ? 'Appearance'
+            : 'General',
     ),
   );
   let backButton: HTMLButtonElement;
@@ -262,6 +270,10 @@
             }))}
         />
       </div>
+    {:else if active === 'Modules'}
+      <ModuleSettings />
+    {:else if active === 'Updates'}
+      <UpdateSettings />
     {:else if active === 'Shortcuts'}
       <LauncherSettings
         bind:this={launcherSettings}
@@ -465,7 +477,8 @@
   .tabs {
     padding: 14px 26px 0;
     display: flex;
-    gap: 23px;
+    gap: 17px;
+    overflow-x: auto;
     border-bottom: 1px solid var(--border);
     flex-shrink: 0;
   }
@@ -474,6 +487,7 @@
     background: transparent;
     border: 0;
     padding: 0 0 12px;
+    white-space: nowrap;
     color: var(--muted);
     font: inherit;
     font-size: var(--text-12);

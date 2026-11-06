@@ -122,11 +122,17 @@ pub struct ApplicationCatalog {
     next_icon_worker: AtomicUsize,
 }
 
+impl ApplicationCatalog {
+    pub async fn clear(&self) {
+        *self.snapshot.write().await = None;
+    }
+}
 #[tauri::command]
 pub async fn list_applications(
     catalog: State<'_, ApplicationCatalog>,
     refresh: Option<bool>,
 ) -> Result<ApplicationList, String> {
+    crate::modules::require("applications")?;
     if !refresh.unwrap_or(false) {
         if let Some(cached) = catalog.snapshot.read().await.as_ref() {
             return Ok(cached.list.clone());
@@ -164,6 +170,7 @@ pub async fn list_applications(
     let mut launches = HashMap::new();
     let mut ids_by_identity = HashMap::new();
     for candidate in discovered.candidates {
+        crate::modules::require("applications")?;
         let persistent_key = format!("app:v1:{:x}", Sha256::digest(candidate.identity.as_bytes()));
         // Keep IDs stable across refreshes for entries with the same native
         // identity, while retaining no executable/path supplied by the UI.
@@ -194,7 +201,10 @@ pub async fn list_applications(
         applications,
         warnings: discovered.warnings,
     };
-    *catalog.snapshot.write().await = Some(Arc::new(CatalogSnapshot {
+    crate::modules::require("applications")?;
+    let mut snapshot = catalog.snapshot.write().await;
+    crate::modules::require("applications")?;
+    *snapshot = Some(Arc::new(CatalogSnapshot {
         list: list.clone(),
         launches,
         ids_by_identity,
@@ -210,6 +220,7 @@ pub async fn launch_application(
     id: String,
     mode: Option<crate::elevation::LaunchMode>,
 ) -> Result<ApplicationLaunchResult, String> {
+    crate::modules::require("applications")?;
     if id.len() > 64 {
         return Err("Invalid application ID.".into());
     }
@@ -460,7 +471,8 @@ mod platform {
         }
 
         fn full(&self) -> bool {
-            self.discovery.candidates.len() >= MAX_APPLICATIONS
+            !crate::modules::enabled("applications")
+                || self.discovery.candidates.len() >= MAX_APPLICATIONS
         }
 
         fn add(&mut self, candidate: Candidate) {

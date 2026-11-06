@@ -6,6 +6,8 @@ import {
   runShellCommand,
   type LaunchMode,
 } from '../native';
+import { get } from 'svelte/store';
+import { modules, commandEnabled } from '../stores/modules';
 import type { Command } from '../types/command';
 
 export type ExecutionResult =
@@ -19,6 +21,8 @@ export async function executeCommand(
   command: Command,
   mode: LaunchMode = 'normal',
 ): Promise<ExecutionResult> {
+  if (!commandEnabled(command, get(modules)))
+    throw new Error('This module is disabled.');
   const action = command.action;
   if (mode === 'administrator') {
     if (!(

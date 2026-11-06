@@ -57,6 +57,13 @@ pub async fn execute_native(
     action: NativeAction,
     mode: Option<crate::elevation::LaunchMode>,
 ) -> Result<ActionResult, String> {
+    match action {
+        NativeAction::Notepad
+        | NativeAction::Calculator
+        | NativeAction::Explorer
+        | NativeAction::WindowsSettings => crate::modules::require("applications")?,
+        _ => crate::modules::require("utilities")?,
+    }
     if matches!(mode, Some(crate::elevation::LaunchMode::Administrator)) {
         if !matches!(action, NativeAction::Notepad) {
             return Err("Administrator launching is unavailable for this action.".into());

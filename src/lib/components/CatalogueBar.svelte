@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { CommandScope } from '../stores/applications';
+  import { modules } from '../stores/modules';
   import { preferences } from '../stores/preferences';
   import { shortcutLabel } from '../shortcuts';
   let {
@@ -7,14 +8,20 @@
     onselect,
   }: { scope: CommandScope; onselect: (scope: CommandScope) => void } =
     $props();
-  const scopes: { id: CommandScope; label: string }[] = [
-    { id: 'all', label: 'All' },
-    { id: 'applications', label: 'Applications' },
-    { id: 'commands', label: 'Commands' },
-    { id: 'files', label: 'Files' },
-    { id: 'favorites', label: 'Favorites' },
-    { id: 'recents', label: 'Recents' },
-  ];
+  const scopes = $derived(
+    (
+      [
+        { id: 'all', label: 'All' },
+        { id: 'applications', label: 'Applications' },
+        { id: 'commands', label: 'Commands' },
+        { id: 'files', label: 'Files' },
+        { id: 'favorites', label: 'Favorites' },
+        { id: 'recents', label: 'Recents' },
+      ] as { id: CommandScope; label: string }[]
+    )
+      .filter((entry) => entry.id !== 'applications' || $modules.applications)
+      .filter((entry) => entry.id !== 'files' || $modules.files),
+  );
   function navigate(event: KeyboardEvent, index: number) {
     if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
     event.preventDefault();

@@ -7,6 +7,7 @@ import {
   type FileItem,
   type FileIndexStatus,
 } from '../native';
+import { modules } from './modules';
 import { personalization } from './personalization';
 import { commandCatalogue } from './applications';
 import type { Command } from '../types/command';
@@ -40,7 +41,7 @@ export function fileCommand(item: FileItem, query?: string): Command {
 }
 let refreshGeneration = 0;
 export async function refreshSavedFiles(): Promise<void> {
-  if (!isNative()) return;
+  if (!isNative() || !get(modules).files) return;
   const generation = ++refreshGeneration;
   const state = get(personalization);
   const keys = [

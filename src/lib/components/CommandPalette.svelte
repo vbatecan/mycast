@@ -28,7 +28,13 @@
     toggleFavorite,
     recordSuccessfulUse,
   } from '../stores/personalization';
-  import { calculateExpression } from '../commands/calculator';
+  import {
+    modules,
+    modulesReady,
+    initializeModules,
+    commandEnabled,
+  } from '../stores/modules';
+  import { get } from 'svelte/store';
   import type { Calculation } from '../commands/calculator';
   import { executeCommand } from '../commands/execute';
   import {
@@ -43,11 +49,13 @@
     fileCommand,
     observeFileIndex,
   } from '../stores/files';
+  import { updateState } from '../stores/updates';
   import { preferences } from '../stores/preferences';
   import {
     applications,
     commandCatalogue,
     loadApplications,
+    unloadApplications,
   } from '../stores/applications';
   import type { CommandScope } from '../stores/applications';
   import type { Command } from '../types/command';
@@ -55,7 +63,9 @@
   let query = $state('');
   let selectedKey = $state('');
   let searchTimestamp = $state(Date.now());
-  let view = $state<'palette' | 'settings' | 'about' | 'appearance'>('palette');
+  let view = $state<
+    'palette' | 'settings' | 'about' | 'appearance' | 'updates'
+  >('palette');
   let scope = $state<CommandScope>('all');
   let input = $state<HTMLInputElement>();
   let busy = $state(false);
@@ -71,7 +81,7 @@
   let fileSearchError = $state('');
   let fileSearching = $state(false);
   let requestSequence = Date.now() * 1000;
-  let runMode = $derived(query.trimStart().startsWith('>'));
+  let runMode = $derived($modules.run && query.trimStart().startsWith('>'));
   let runText = $derived(runMode ? query.trimStart().slice(1).trimStart() : '');
   let messageTimer: ReturnType<typeof setTimeout> | undefined;
   let hideTimer: ReturnType<typeof setTimeout> | undefined;
@@ -82,22 +92,124 @@
           (command) => [command.personalizationKey ?? command.id, command],
         ),
       ).values(),
-    ].filter(
-      (command) =>
-        !['applications', 'commands', 'files'].includes(scope) ||
-        (scope === 'files'
-          ? command.category === 'Files'
-          : scope === 'applications'
-            ? command.category === 'Applications'
-            : command.category !== 'Applications' &&
-              command.category !== 'Files'),
-    ),
+    ]
+      .filter((command) => $modulesReady && commandEnabled(command, $modules))
+      .filter(
+        (command) =>
+          !['applications', 'commands', 'files'].includes(scope) ||
+          (scope === 'files'
+            ? command.category === 'Files'
+            : scope === 'applications'
+              ? command.category === 'Applications'
+              : command.category !== 'Applications' &&
+                command.category !== 'Files'),
+      ),
   );
-  let calculation = $derived.by((): Calculation =>
-    runMode || ['applications', 'favorites', 'recents', 'files'].includes(scope)
-      ? { kind: 'none' }
-      : calculateExpression(query),
-  );
+  let calculation = $state<Calculation>({ kind: 'none' });
+  let calculationDetail = $state('');
+  let calculationModule = $state<'calculator' | 'currency'>('calculator');
+  $effect(() => {
+    const text = query
+      .trim()
+      .replaceAll('−', '-')
+      .replaceAll('×', '*')
+      .replaceAll('÷', '/');
+    const allowed =
+      $modulesReady &&
+      shown &&
+      view === 'palette' &&
+      !runMode &&
+      !['applications', 'favorites', 'recents', 'files'].includes(scope);
+    const math = $modules.calculator;
+    const currency = $modules.currency;
+    const pair = text.match(
+      /^([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)\s+([a-z]{3})\s+(?:to|in)\s+([a-z]{3})$/i,
+    );
+    let cancelled = false;
+    const controller = new AbortController();
+    calculation = { kind: 'none' };
+    calculationDetail = '';
+    if (
+      !allowed ||
+      !(pair ? currency : math) ||
+      (!pair &&
+        !/^(?:[+\-.(\d]|(?:sqrt|sin|cos|tan|log|ln|abs|exp|floor|ceil|round|pi|e|i)\b)/i.test(
+          text,
+        ))
+    )
+      return;
+    const timer = setTimeout(async () => {
+      try {
+        if (pair) {
+          const provider = await import('../modules/currency');
+          if (cancelled) return;
+          const result = await provider.convert(
+            pair[1],
+            pair[2].toUpperCase(),
+            pair[3].toUpperCase(),
+            controller.signal,
+          );
+          if (!cancelled) {
+            calculation = {
+              kind: 'success',
+              value: 0,
+              formatted: result.formatted,
+            };
+            calculationDetail = result.description;
+            calculationModule = 'currency';
+          }
+        } else {
+          const provider = await import('../modules/fend');
+          if (cancelled) return;
+          const result = await provider.evaluate(text);
+          if (!cancelled) {
+            calculation = { kind: 'success', value: 0, formatted: result };
+            calculationDetail = 'fend · Copy result to clipboard';
+            calculationModule = 'calculator';
+          }
+        }
+      } catch (reason) {
+        if (!cancelled)
+          calculation = { kind: 'error', message: String(reason) };
+      }
+    }, 180);
+    return () => {
+      cancelled = true;
+      controller.abort();
+      clearTimeout(timer);
+    };
+  });
+  $effect(() => {
+    if (!$modulesReady || !isNative() || !shown || !$modules.files) return;
+    let cancelled = false;
+    let stop: (() => void) | undefined;
+    void observeFileIndex()
+      .then((dispose) => {
+        if (cancelled) dispose?.();
+        else {
+          stop = dispose;
+          filesReady = true;
+        }
+      })
+      .catch((reason) => notify(String(reason), true));
+    return () => {
+      cancelled = true;
+      stop?.();
+      filesReady = false;
+    };
+  });
+  $effect(() => {
+    if (!$modulesReady) return;
+    if (!$modules.applications) unloadApplications();
+    else if (shown) void loadApplications();
+  });
+  $effect(() => {
+    if (
+      (scope === 'files' && !$modules.files) ||
+      (scope === 'applications' && !$modules.applications)
+    )
+      scope = 'all';
+  });
   let searchOptions = $derived({
     ...$personalization,
     recentLimit: $preferences.recentLimit,
@@ -122,8 +234,9 @@
       return [
         {
           id: 'calculation',
+          module: calculationModule,
           label: calculation.formatted,
-          description: query + '  ·  Copy result to clipboard',
+          description: query + ' · ' + calculationDetail,
           category: 'Calculator',
           icon: 'result',
           keywords: [],
@@ -138,6 +251,7 @@
     const state = $personalization;
     $fileStatus.revision;
     const active =
+      $modules.files &&
       filesReady &&
       shown &&
       view === 'palette' &&
@@ -237,6 +351,13 @@
     await focusSearch();
   }
   function selectScope(next: CommandScope) {
+    if (
+      (next === 'applications' && !get(modules).applications) ||
+      (next === 'files' && !get(modules).files)
+    ) {
+      notify('This module is disabled. Enable it in Settings → Modules.');
+      return;
+    }
     scope = next;
     selectedKey = '';
     void focusSearch();
@@ -337,14 +458,20 @@
       (action === 'nextFilter' || action === 'previousFilter')
     ) {
       event.preventDefault();
-      const scopes: CommandScope[] = [
-        'all',
-        'applications',
-        'commands',
-        'files',
-        'favorites',
-        'recents',
-      ];
+      const scopes: CommandScope[] = (
+        [
+          'all',
+          'applications',
+          'commands',
+          'files',
+          'favorites',
+          'recents',
+        ] as CommandScope[]
+      )
+        .filter(
+          (value) => value !== 'applications' || get(modules).applications,
+        )
+        .filter((value) => value !== 'files' || get(modules).files);
       selectScope(
         scopes[
           (scopes.indexOf(scope) +
@@ -385,17 +512,7 @@
       if (disposed) stop();
       else unlisteners.push(stop);
     };
-    let filesStarted = false;
-    const startFiles = () => {
-      if (filesStarted) return;
-      filesStarted = true;
-      void observeFileIndex()
-        .then((stop) => {
-          rememberListener(stop);
-          if (!disposed) filesReady = true;
-        })
-        .catch((error) => notify(String(error), true));
-    };
+    void initializeModules().catch((reason) => notify(String(reason), true));
     if (isNative()) {
       void getLauncherStatus()
         .then((status) => {
@@ -405,7 +522,6 @@
           platform = status.platform;
           shown = status.visible;
           if (status.visible) {
-            startFiles();
             void focusSearch();
             void loadApplications();
           }
@@ -414,7 +530,6 @@
         })
         .catch((error) => notify(String(error), true));
       void listen('launcher-shown', () => {
-        startFiles();
         clearTimeout(hideTimer);
         shown = false;
         searchTimestamp = Date.now();
@@ -516,7 +631,7 @@
         >
       </div>
     {/if}
-    {#if calculation.kind === 'error'}
+    {#if calculation.kind === 'error' && !results.length}
       <div class="calculation-error" role="status">
         <CircleAlert size={16} />
         <div>
@@ -594,9 +709,13 @@
       </div>
       <button
         class="preferences-button"
-        title="Open Mycast settings"
+        class:update-available={$updateState.status === 'available'}
+        title={$updateState.status === 'available'
+          ? `Update ${$updateState.version} available — open Updates`
+          : 'Open Mycast settings'}
         aria-label="Open Mycast settings"
-        onclick={() => (view = 'settings')}
+        onclick={() =>
+          (view = $updateState.status === 'available' ? 'updates' : 'settings')}
         ><SlidersHorizontal size={14} /></button
       >
     </footer>
@@ -716,7 +835,21 @@
     color: var(--secondary);
     background: var(--surface);
   }
+  .preferences-button.update-available {
+    color: var(--accent);
+  }
+  .preferences-button.update-available::after {
+    content: '';
+    position: absolute;
+    right: -2px;
+    top: 0;
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--accent);
+  }
   .preferences-button {
+    position: relative;
     height: 24px;
     width: 26px;
     border: 0;

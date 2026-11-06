@@ -2,6 +2,7 @@ import { derived, get, writable } from 'svelte/store';
 import { isNative, listApplications } from '../native';
 import type { InstalledApplication } from '../native';
 import type { Command } from '../types/command';
+import { modules, initializeModules } from './modules';
 import { commands } from '../commands/registry';
 import { invalidateApplicationIcons } from '../applications/icons';
 
@@ -25,7 +26,9 @@ export const applications = { subscribe: state.subscribe };
 let pending: Promise<void> | undefined;
 
 /** One native discovery per session, with explicit refresh and no watchers. */
-export function loadApplications(refresh = false): Promise<void> {
+export async function loadApplications(refresh = false): Promise<void> {
+  await initializeModules();
+  if (!get(modules).applications) return;
   if (pending) return pending;
   if (!isNative()) {
     state.set({
@@ -41,6 +44,7 @@ export function loadApplications(refresh = false): Promise<void> {
   pending = listApplications(refresh)
     .then((catalogue) => {
       if (refresh) invalidateApplicationIcons();
+      if (!get(modules).applications) return;
       state.set({
         applications: catalogue.applications,
         warnings: catalogue.warnings,
@@ -111,3 +115,8 @@ export function mergeCatalogue(installed: readonly Command[]): Command[] {
 }
 
 export const commandCatalogue = derived(installedCommands, mergeCatalogue);
+
+export function unloadApplications() {
+  invalidateApplicationIcons();
+  state.set({ applications: [], status: 'idle', warnings: [], error: null });
+}

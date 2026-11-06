@@ -28,7 +28,7 @@
     placeholder="Search apps, commands, files… or > to run"
     autocomplete="off"
     spellcheck="false"
-    maxlength={value.trimStart().startsWith('>') ? 8193 : 256}
+    maxlength={value.trimStart().startsWith('>') ? 8193 : 512}
   />
   {#if value}
     <button

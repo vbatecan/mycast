@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { watchUpdates } from './lib/stores/updates';
   import { onMount } from 'svelte';
   import CommandPalette from './lib/components/CommandPalette.svelte';
   import { preferences } from './lib/stores/preferences';
@@ -11,6 +12,7 @@
   } from './lib/stores/themes';
 
   onMount(observeSystemTheme);
+  onMount(watchUpdates);
   const selectedMaterial = $derived($preferences.material);
   const darkMaterial = $derived($activeTheme.scheme === 'dark');
   $effect(() => applyTheme($activeTheme));

@@ -1,9 +1,11 @@
 mod appearance;
 mod applications;
+mod calculator;
 mod commands;
 mod elevation;
 mod files;
 mod launcher;
+mod modules;
 
 use tauri::{
     AppHandle, Emitter, Manager, PhysicalPosition, WindowEvent,
@@ -72,6 +74,10 @@ fn has_owned_foreground(_window: &tauri::Window) -> bool {
     false
 }
 
+#[tauri::command]
+fn updater_supported() -> bool {
+    cfg!(windows) || (cfg!(target_os = "linux") && std::env::var_os("APPIMAGE").is_some())
+}
 pub fn run() {
     tauri::Builder::default()
         // Register first: a second launch activates the existing process and exits.
@@ -83,6 +89,8 @@ pub fn run() {
             }
         }))
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             Some(vec!["--background"]),
@@ -99,6 +107,7 @@ pub fn run() {
                 .build(),
         )
         .setup(|app| {
+            app.manage(modules::Modules::load(app.handle()));
             app.manage(applications::ApplicationCatalog::default());
             app.manage(files::FileIndex::new(app.handle()));
             app.manage(launcher::LauncherControls::default());
@@ -159,6 +168,10 @@ pub fn run() {
             _ => {}
         })
         .invoke_handler(tauri::generate_handler![
+            modules::get_modules,
+            modules::set_module,
+            calculator::evaluate_math,
+            updater_supported,
             appearance::set_window_material,
             launcher::get_launcher_status,
             launcher::set_launcher_shortcut,

@@ -115,6 +115,7 @@ struct Index {
     status: FileIndexStatus,
 }
 enum Work {
+    Stop,
     Rebuild,
     Events(Event),
     Failed,
@@ -125,6 +126,7 @@ pub struct FileIndex {
     preferences: Arc<RwLock<FilePreferences>>,
     sender: Mutex<Option<mpsc::SyncSender<Work>>>,
     started: AtomicBool,
+    worker: Mutex<Option<std::thread::JoinHandle<()>>>,
     generation: Arc<AtomicU64>,
     session: String,
     cache_path: PathBuf,
@@ -270,6 +272,7 @@ impl FileIndex {
             preferences: Arc::new(RwLock::new(preferences)),
             sender: Mutex::new(None),
             started: AtomicBool::new(false),
+            worker: Mutex::new(None),
             generation: Arc::new(AtomicU64::new(0)),
             session: uuid::Uuid::new_v4().simple().to_string()[..16].to_string(),
             cache_path: directory.join("file-index.v1.json"),
@@ -280,6 +283,9 @@ impl FileIndex {
         }
     }
     fn start(&self, app: &AppHandle) {
+        if !crate::modules::enabled("files") {
+            return;
+        }
         if self.started.swap(true, Ordering::SeqCst) {
             return;
         }
@@ -290,7 +296,7 @@ impl FileIndex {
         let cache_path = self.cache_path.clone();
         let identities = self.identities.clone();
         let app = app.clone();
-        std::thread::spawn(move || {
+        let worker = std::thread::spawn(move || {
             index_worker(
                 app,
                 inner,
@@ -301,6 +307,17 @@ impl FileIndex {
                 receiver,
             )
         });
+        *self.worker.lock().unwrap() = Some(worker);
+    }
+    pub fn stop(&self) {
+        if let Some(sender) = self.sender.lock().unwrap().take() {
+            let _ = sender.send(Work::Stop);
+        }
+        if let Some(worker) = self.worker.lock().unwrap().take() {
+            let _ = worker.join();
+        }
+        self.started.store(false, Ordering::SeqCst);
+        self.inner.write().unwrap().entries.clear();
     }
     fn rebuild(&self, app: &AppHandle) {
         if !self.started.load(Ordering::SeqCst) {
@@ -501,6 +518,9 @@ fn scan(
     });
     builder.build_parallel().run(|| {
         Box::new(|result| {
+            if !crate::modules::enabled("files") {
+                return ignore::WalkState::Quit;
+            }
             let item = match result {
                 Ok(item) => item,
                 Err(error) => {
@@ -601,6 +621,9 @@ fn index_worker(
         announce(&app, &inner, "reconciling", &[]);
     }
     loop {
+        if !crate::modules::enabled("files") {
+            break;
+        }
         if rebuild {
             let config = preferences.read().unwrap().clone();
             let mut warnings = Vec::new();
@@ -664,6 +687,9 @@ fn index_worker(
             hydrate_identities(&mut previous, &identities);
             let paths: Vec<_> = config.roots.iter().map(PathBuf::from).collect();
             let (mut entries, errors) = scan(&paths, &config, &previous, &cache_path, &identities);
+            if !crate::modules::enabled("files") {
+                break;
+            }
             hydrate_identities(&mut entries, &identities);
             if config != *preferences.read().unwrap() {
                 continue;
@@ -679,6 +705,9 @@ fn index_worker(
         let Ok(work) = receiver.recv() else {
             break;
         };
+        if matches!(work, Work::Stop) {
+            break;
+        }
         let mut batch = vec![work];
         let started = Instant::now();
         while started.elapsed() < Duration::from_secs(1) {
@@ -686,6 +715,9 @@ fn index_worker(
                 Ok(work) => batch.push(work),
                 Err(_) => break,
             }
+        }
+        if batch.iter().any(|w| matches!(w, Work::Stop)) || !crate::modules::enabled("files") {
+            break;
         }
         if overflow.swap(false, Ordering::SeqCst)
             || batch.iter().any(|work| {
@@ -741,6 +773,9 @@ fn index_worker(
             .cloned()
             .collect();
         let (updated, warnings) = scan(&paths, &config, &previous, &cache_path, &identities);
+        if !crate::modules::enabled("files") {
+            break;
+        }
         if config != *preferences.read().unwrap() {
             rebuild = true;
             continue;
@@ -1033,6 +1068,7 @@ pub async fn search_files(
     index: State<'_, FileIndex>,
     options: FileSearchOptions,
 ) -> Result<FileSearchResults, String> {
+    crate::modules::require("files")?;
     if options.query.len() > 1024
         || options.favorites.len() > 10000
         || options.recents.len() > 50
@@ -1117,6 +1153,7 @@ pub async fn file_action(
     id: String,
     action: String,
 ) -> Result<String, String> {
+    crate::modules::require("files")?;
     let entry = index.resolve(&id)?;
     if !entry.path.exists() {
         return Err(
@@ -1173,6 +1210,7 @@ pub async fn run_shell_command(
     index: State<'_, FileIndex>,
     command: String,
 ) -> Result<String, String> {
+    crate::modules::require("run")?;
     if command.encode_utf16().count() > 8192 || command.contains('\0') {
         return Err("Command is too long or contains a null character.".into());
     }

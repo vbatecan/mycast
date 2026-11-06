@@ -1,0 +1,196 @@
+@import 'tailwindcss';
+
+:root {
+  --text-scale: 1;
+  --row-min-height: 52px;
+  --row-padding: 7px;
+  --row-icon: 32px;
+  --text-8: calc(8px * var(--text-scale));
+  --text-9: calc(9px * var(--text-scale));
+  --text-10: calc(10px * var(--text-scale));
+  --text-11: calc(11px * var(--text-scale));
+  --text-12: calc(12px * var(--text-scale));
+  --text-13: calc(13px * var(--text-scale));
+  --text-14: calc(14px * var(--text-scale));
+  --text-15: calc(15px * var(--text-scale));
+  --text-16: calc(16px * var(--text-scale));
+  --text-17: calc(17px * var(--text-scale));
+  --text-18: calc(18px * var(--text-scale));
+  --text-19: calc(19px * var(--text-scale));
+  --text-20: calc(20px * var(--text-scale));
+  --text-21: calc(21px * var(--text-scale));
+  --text-22: calc(22px * var(--text-scale));
+  --text-23: calc(23px * var(--text-scale));
+  --text-24: calc(24px * var(--text-scale));
+  --text-25: calc(25px * var(--text-scale));
+  --text-26: calc(26px * var(--text-scale));
+  --text-27: calc(27px * var(--text-scale));
+  --text-28: calc(28px * var(--text-scale));
+  --text-29: calc(29px * var(--text-scale));
+  --text-30: calc(30px * var(--text-scale));
+  --text-31: calc(31px * var(--text-scale));
+  --text-32: calc(32px * var(--text-scale));
+  --text-33: calc(33px * var(--text-scale));
+  --text-34: calc(34px * var(--text-scale));
+  --text-35: calc(35px * var(--text-scale));
+  --text-36: calc(36px * var(--text-scale));
+  --text-37: calc(37px * var(--text-scale));
+  --text-38: calc(38px * var(--text-scale));
+  --text-39: calc(39px * var(--text-scale));
+  --text-40: calc(40px * var(--text-scale));
+  --text-41: calc(41px * var(--text-scale));
+  --text-42: calc(42px * var(--text-scale));
+
+  font-family: 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif;
+  color: var(--text);
+  background: transparent;
+  color-scheme: dark;
+  accent-color: var(--accent);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  --bg: #17171b;
+  --surface: #202026;
+  --hover: #292930;
+  --selected: #303039;
+  --text: #f5f5f7;
+  --secondary: #a1a1aa;
+  --muted: #777780;
+  --border: rgba(255, 255, 255, 0.08);
+  --accent: #b5a2ff;
+  --accent-soft: color-mix(in srgb, var(--accent) 12%, var(--bg));
+  --danger: color-mix(in srgb, #e57878 65%, var(--text));
+  --success: color-mix(in srgb, #83b58f 65%, var(--text));
+}
+:root {
+  --window-opacity: 100%;
+  --window-tint: var(--bg);
+  --window-glow: linear-gradient(transparent, transparent);
+  --window-edge: 0 0 0 0 transparent;
+}
+:root[data-material]:not([data-material='solid']) {
+  --window-tint: color-mix(
+    in srgb,
+    var(--bg) var(--window-opacity),
+    transparent
+  );
+}
+:root[data-glow='true'] {
+  --window-glow: radial-gradient(
+    ellipse at 12% 0%,
+    color-mix(in srgb, var(--accent) 12%, transparent),
+    transparent 65%
+  );
+}
+:root[data-highlight-border='true'] {
+  --window-edge: inset 0 1px 0 color-mix(in srgb, var(--text) 12%, transparent);
+}
+:root[data-native='false'][data-material='blur'] {
+  --window-filter: blur(14px);
+}
+:root[data-native='false'][data-material='acrylic'] {
+  --window-filter: blur(28px) saturate(1.25);
+}
+:root[data-native='false'][data-material='mica'] {
+  --window-tint: color-mix(in srgb, var(--accent) 5%, var(--bg));
+}
+:root[data-density='compact'] {
+  --row-min-height: 40px;
+  --row-padding: 3px;
+  --row-icon: 28px;
+}
+* {
+  box-sizing: border-box;
+}
+html,
+body,
+#app,
+main {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+body {
+  min-width: 360px;
+}
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+button {
+  color: inherit;
+  cursor: pointer;
+}
+button:disabled {
+  cursor: not-allowed;
+}
+button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+button,
+input,
+select,
+textarea {
+  -webkit-tap-highlight-color: transparent;
+}
+::selection {
+  background: color-mix(in srgb, var(--accent) 40%, var(--bg));
+  color: var(--text);
+}
+::-webkit-scrollbar {
+  width: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--muted) 40%, var(--bg));
+  border-radius: 6px;
+}
+.motion-off *,
+.motion-off *::before,
+.motion-off *::after {
+  animation: none !important;
+  transition: none !important;
+  scroll-behavior: auto !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}
+/* The desktop fills its native window; this frame only helps browser development. */
+@media (min-width: 800px) {
+  body {
+    background:
+      radial-gradient(
+        ellipse at 20% 20%,
+        color-mix(in srgb, var(--accent) 22%, var(--bg)),
+        transparent 65%
+      ),
+      radial-gradient(
+        ellipse at 85% 85%,
+        color-mix(in srgb, var(--secondary) 18%, var(--bg)),
+        var(--bg) 65%
+      );
+    display: grid;
+    place-items: center;
+  }
+  #app {
+    width: 720px;
+    height: 480px;
+    border-radius: 14px;
+    box-shadow: 0 24px 90px #0008;
+  }
+}
+:root[data-native='true'] body {
+  background: transparent;
+}

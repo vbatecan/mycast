@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "name": "Soft Indigo",
+  "scheme": "dark",
+  "colors": {
+    "background": "#181824",
+    "surface": "#222233",
+    "hover": "#2b2b40",
+    "selected": "#36364e",
+    "text": "#f5f5fa",
+    "secondary": "#acaac2",
+    "muted": "#85829d",
+    "border": "#37374c",
+    "accent": "#b8adf2"
+  }
+}

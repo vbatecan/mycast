@@ -21,6 +21,8 @@ npm run tauri build
 
 Executable: `src-tauri/target/release/mycast.exe`. NSIS installer: `src-tauri/target/release/bundle/nsis`. Use `npm run tauri build -- --no-bundle` for only the executable. Installers are unsigned.
 
+GitHub Actions builds Windows and Linux packages on pushes to `main` and pull requests. Pushing a matching version tag such as `v0.1.0` automatically publishes a GitHub Release with the Windows installer, Linux `.deb` and `.AppImage`, and checksums after both builds succeed. Linux packages are experimental; several native features remain Windows-only. See [builds and releases](docs/releasing.md) for versioning, downloads, and pipeline behavior. Tests remain paused in the workflow.
+
 ## Use
 
 - Alt + Space toggles the launcher. General preferences let you record, save, cancel, or reset this shortcut. Conflicts keep the working shortcut. Startup tries your saved shortcut, then Alt + Space and Ctrl + Alt + Space as recovery options. The tray can reopen or quit Mycast.

@@ -1,13 +1,13 @@
 export const shortcutActions = [
-  ['all', 'All', 'Ctrl+Alt+1'],
-  ['applications', 'Applications', 'Ctrl+Alt+2'],
-  ['commands', 'Commands', 'Ctrl+Alt+3'],
-  ['files', 'Files', 'Ctrl+Alt+4'],
-  ['favorites', 'Favorites', 'Ctrl+Alt+5'],
-  ['recents', 'Recents', 'Ctrl+Alt+6'],
+  ['all', 'All', 'Alt+Shift+1'],
+  ['applications', 'Applications', 'Alt+Shift+2'],
+  ['commands', 'Commands', 'Alt+Shift+3'],
+  ['files', 'Files', 'Alt+Shift+4'],
+  ['favorites', 'Favorites', 'Alt+Shift+5'],
+  ['recents', 'Recents', 'Alt+Shift+6'],
   ['pin', 'Pin selected item', 'Ctrl+D'],
-  ['nextFilter', 'Next filter', 'Ctrl+Tab'],
-  ['previousFilter', 'Previous filter', 'Ctrl+Shift+Tab'],
+  ['nextFilter', 'Next filter', 'Alt+Shift+ArrowRight'],
+  ['previousFilter', 'Previous filter', 'Alt+Shift+ArrowLeft'],
   ['nextItem', 'Next result', 'ArrowDown'],
   ['previousItem', 'Previous result', 'ArrowUp'],
   ['open', 'Open selected item', 'Enter'],
@@ -91,4 +91,31 @@ export function shortcutLabel(binding: string): string {
     .replace('ArrowLeft', '←')
     .replace('ArrowRight', '→')
     .replace('Escape', 'Esc');
+}
+
+/** Upgrade only legacy defaults, keeping custom bindings and avoiding conflicts. */
+export function migrateFilterShortcuts(value: unknown): ShortcutBindings {
+  const result = validateShortcuts(value);
+  const legacy: Partial<ShortcutBindings> = {
+    all: 'Ctrl+Alt+1',
+    applications: 'Ctrl+Alt+2',
+    commands: 'Ctrl+Alt+3',
+    files: 'Ctrl+Alt+4',
+    favorites: 'Ctrl+Alt+5',
+    recents: 'Ctrl+Alt+6',
+    nextFilter: 'Ctrl+Tab',
+    previousFilter: 'Ctrl+Shift+Tab',
+  };
+  for (const id of Object.keys(legacy) as ShortcutAction[]) {
+    if (result[id] !== legacy[id]) continue;
+    const target = defaultShortcuts[id];
+    if (
+      Object.entries(result).some(
+        ([other, binding]) => other !== id && binding === target,
+      )
+    )
+      continue;
+    result[id] = target;
+  }
+  return result;
 }

@@ -2,6 +2,7 @@ import { writable } from 'svelte/store';
 import {
   defaultShortcuts,
   validateShortcuts,
+  migrateFilterShortcuts,
   type ShortcutBindings,
 } from '../shortcuts';
 
@@ -16,6 +17,7 @@ export interface Preferences {
   highlightBorder: boolean;
   recentLimit: number;
   shortcuts: ShortcutBindings;
+  shortcutDefaultsVersion: 2;
 }
 
 export type WindowMaterial =
@@ -40,12 +42,14 @@ const defaults: Preferences = {
   highlightBorder: true,
   recentLimit: 5,
   shortcuts: { ...defaultShortcuts },
+  shortcutDefaultsVersion: 2,
 };
 
 function validated(value: unknown): Preferences {
   if (!value || typeof value !== 'object') return { ...defaults };
   const candidate = value as Partial<Preferences>;
   return {
+    shortcutDefaultsVersion: 2,
     shortcuts: validateShortcuts(candidate.shortcuts),
     recentLimit:
       typeof candidate.recentLimit === 'number' &&
@@ -82,8 +86,17 @@ function validated(value: unknown): Preferences {
 
 function load(): Preferences {
   try {
-    if (typeof localStorage !== 'undefined')
-      return validated(JSON.parse(localStorage.getItem(storageKey) ?? 'null'));
+    if (typeof localStorage !== 'undefined') {
+      const saved = JSON.parse(localStorage.getItem(storageKey) ?? 'null');
+      if (
+        saved &&
+        typeof saved === 'object' &&
+        saved.shortcutDefaultsVersion !== 2
+      ) {
+        saved.shortcuts = migrateFilterShortcuts(saved.shortcuts);
+      }
+      return validated(saved);
+    }
   } catch {
     // Storage can be unavailable or left with an invalid value; defaults stay usable.
   }

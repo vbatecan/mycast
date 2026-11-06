@@ -7,7 +7,7 @@ import {
   validShortcut,
 } from '../src/lib/shortcuts';
 
-test('default filters map to Ctrl+Alt+1–6 and use physical number keys', () => {
+test('default filters map to Alt+Shift+1–6 and use physical number keys', () => {
   const scopes = [
     'all',
     'applications',
@@ -20,9 +20,9 @@ test('default filters map to Ctrl+Alt+1–6 and use physical number keys', () =>
     const binding = eventShortcut({
       key: '!',
       code: `Digit${index + 1}`,
-      ctrlKey: true,
+      ctrlKey: false,
       altKey: true,
-      shiftKey: false,
+      shiftKey: true,
       metaKey: false,
     });
     assert.equal(binding, defaultShortcuts[scope]);
@@ -35,6 +35,6 @@ test('shortcut validation preserves typing, rejects duplicate storage, and migra
   assert.equal(validShortcut('Alt+Tab'), false);
   assert.equal(validShortcut('Ctrl+Shift+Q'), true);
   assert.deepEqual(validateShortcuts(undefined), defaultShortcuts);
-  assert.deepEqual(validateShortcuts({ all: 'Ctrl+Alt+2' }), defaultShortcuts);
+  assert.deepEqual(validateShortcuts({ all: 'Alt+Shift+2' }), defaultShortcuts);
   assert.equal(validateShortcuts({ all: 'Ctrl+Shift+Q' }).all, 'Ctrl+Shift+Q');
 });

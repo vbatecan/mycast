@@ -15,7 +15,7 @@ test('filter shortcuts, recording, conflicts, persistence, and reset', async ({
     'Recents',
   ];
   for (let index = 0; index < scopes.length; index++) {
-    await page.getByRole('combobox').press(`Control+Alt+Digit${index + 1}`);
+    await page.getByRole('combobox').press(`Alt+Shift+Digit${index + 1}`);
     await expect(
       page.getByRole('button', { name: scopes[index], exact: true }),
     ).toHaveAttribute('aria-pressed', 'true');
@@ -28,7 +28,7 @@ test('filter shortcuts, recording, conflicts, persistence, and reset', async ({
     exact: true,
   });
   await all.click();
-  await all.press('Control+Alt+2');
+  await all.press('Alt+Shift+2');
   await expect(page.getByRole('alert')).toContainText(
     'Already used for Applications',
   );
@@ -55,8 +55,8 @@ test('filter shortcuts, recording, conflicts, persistence, and reset', async ({
     page.getByRole('button', { name: 'All', exact: true }),
   ).toHaveAttribute('aria-pressed', 'true');
   await page.reload();
-  await page.getByRole('combobox').press('Control+Alt+4');
-  await page.getByRole('combobox').press('Control+Alt+1');
+  await page.getByRole('combobox').press('Alt+Shift+4');
+  await page.getByRole('combobox').press('Alt+Shift+1');
   await expect(
     page.getByRole('button', { name: 'Files', exact: true }),
   ).toHaveAttribute('aria-pressed', 'true');
@@ -69,7 +69,7 @@ test('filter shortcuts, recording, conflicts, persistence, and reset', async ({
   await page
     .getByRole('button', { name: 'Reset controls', exact: true })
     .click();
-  await expect(all).toHaveText('Ctrl+Alt+1');
+  await expect(all).toHaveText('Alt+Shift+1');
 });
 
 test('navigation and open/back controls can be changed', async ({ page }) => {
@@ -96,11 +96,11 @@ test('navigation and open/back controls can be changed', async ({ page }) => {
   await expect(page.getByRole('option', { selected: true })).toContainText(
     'Open Calculator',
   );
-  await search.press('Control+Tab');
+  await search.press('Alt+Shift+ArrowRight');
   await expect(
     page.getByRole('button', { name: 'Applications', exact: true }),
   ).toHaveAttribute('aria-pressed', 'true');
-  await search.press('Control+Shift+Tab');
+  await search.press('Alt+Shift+ArrowLeft');
   await expect(
     page.getByRole('button', { name: 'All', exact: true }),
   ).toHaveAttribute('aria-pressed', 'true');

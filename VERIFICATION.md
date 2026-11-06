@@ -1,5 +1,9 @@
 # Verification recorded during implementation
 
+## Alt + Shift filter shortcuts — 2026-11-07
+
+Changed the six filter defaults to Alt + Shift + 1–6 and previous/next filter defaults to Alt + Shift + Left/Right. The existing shortcut editor and tooltips use these defaults automatically. A one-time preferences migration upgrades the previous Ctrl + Alt number bindings and Ctrl + Tab cycling bindings without changing custom bindings; a conflicting custom binding takes priority. The migration version is persisted so users can subsequently reassign any valid binding without it being migrated again. Existing shortcut regression sources and the README were updated. Tests remained paused as requested.
+
 ## Commands selection and controls — 2026-11-07
 
 Replaced the narrow all-in-one column with a two-pane editor. The 200-pixel left pane contains searchable commands with native application icons, selection highlighting, pin indicators, and keyboard selection. The right pane shows the selected item's icon, name, description, availability, favorite toggle and position controls, and inline alias chips with add/remove controls. Alias validation uses the existing shared rules and saves immediately. Each pane scrolls independently beneath the fixed settings navigation.

@@ -3,6 +3,7 @@ import type { NativeAction } from './types/command';
 import type { WindowMaterial } from './stores/preferences';
 
 export interface LauncherStatus {
+  platform: string;
   shortcut: string | null;
   shortcutError: string | null;
   version: string;
@@ -14,6 +15,7 @@ export interface LauncherStatus {
 }
 
 export interface InstalledApplication {
+  canRunAsAdmin?: boolean;
   id: string;
   persistentKey: string;
   name: string;
@@ -52,7 +54,9 @@ export const setLaunchAtStartup = (enabled: boolean): Promise<LauncherStatus> =>
   nativeInvoke('set_launch_at_startup', { enabled });
 export const executeNative = (
   action: NativeAction,
-): Promise<{ message: string }> => nativeInvoke('execute_native', { action });
+  mode: LaunchMode = 'normal',
+): Promise<{ message: string; cancelled?: boolean }> =>
+  nativeInvoke('execute_native', { action, mode });
 export const copyText = (text: string): Promise<void> =>
   nativeInvoke('copy_text', { text });
 export const hideLauncher = (): Promise<void> => nativeInvoke('hide_launcher');
@@ -65,8 +69,12 @@ export const listApplications = (
   refresh = false,
 ): Promise<ApplicationCatalogue> =>
   nativeInvoke('list_applications', { refresh });
-export const launchApplication = (id: string): Promise<{ message: string }> =>
-  nativeInvoke('launch_application', { id });
+export type LaunchMode = 'normal' | 'administrator';
+export const launchApplication = (
+  id: string,
+  mode: LaunchMode = 'normal',
+): Promise<{ message: string; cancelled?: boolean }> =>
+  nativeInvoke('launch_application', { id, mode });
 export const getApplicationIcon = (id: string): Promise<string | null> =>
   nativeInvoke('get_application_icon', { id });
 

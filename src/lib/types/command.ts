@@ -28,6 +28,7 @@ export type CommandAction =
   | { type: 'copy'; text: string };
 
 export interface Command {
+  canRunAsAdmin?: boolean;
   id: string;
   /** Stable, non-executable identity; absent on ephemeral calculator results. */
   personalizationKey?: string;

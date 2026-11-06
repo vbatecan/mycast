@@ -1,6 +1,6 @@
 [package]
 name = "mycast"
-version = "0.1.0"
+version = "0.1.1"
 description = "A small, keyboard-first Windows command launcher"
 authors = ["Mycast contributors"]
 edition = "2024"

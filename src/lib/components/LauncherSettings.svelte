@@ -234,7 +234,7 @@
   <div class="setting-label">
     <span>Launch at startup</span><small
       >{status?.startupAvailable
-        ? 'Start hidden in the tray when you sign in to Windows.'
+        ? 'Start directly in the tray at sign-in. Manual launches show Mycast.'
         : status?.startupError ||
           'Available in the installed release. Development depends on Vite.'}</small
     >

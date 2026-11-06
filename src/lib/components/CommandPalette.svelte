@@ -64,7 +64,8 @@
   let shown = $state(true);
   let shortcut = $state<string | null>(null);
   let shortcutError = $state<string | null>(null);
-  let version = $state('0.1.0');
+  let version = $state('0.1.1');
+  let platform = $state('');
   let filesReady = $state(false);
   let fileMatches = $state<Command[]>([]);
   let fileSearchError = $state('');
@@ -262,11 +263,18 @@
       $preferences.animations && !reducedMotion ? 110 : 0,
     );
   }
-  async function execute(command: Command) {
+  async function execute(
+    command: Command,
+    mode: import('../native').LaunchMode = 'normal',
+  ) {
     if (busy) return;
     busy = true;
     try {
-      const result = await executeCommand(command);
+      const result = await executeCommand(command, mode);
+      if (result.type === 'cancelled') {
+        notify(result.message);
+        return;
+      }
       recordSuccessfulUse(command);
       searchTimestamp = Date.now();
       if (result.type === 'view') view = result.view;
@@ -311,6 +319,12 @@
     ) {
       event.preventDefault();
       selectScope(action as CommandScope);
+      return;
+    }
+    if (view === 'palette' && action === 'openAdmin') {
+      event.preventDefault();
+      if (selectedCommand && !event.repeat)
+        void execute(selectedCommand, 'administrator');
       return;
     }
     if (view === 'palette' && action === 'pin') {
@@ -388,6 +402,7 @@
           shortcut = status.shortcut;
           shortcutError = status.shortcutError;
           version = status.version;
+          platform = status.platform;
           shown = status.visible;
           if (status.visible) {
             startFiles();
@@ -451,6 +466,7 @@
   {#if view !== 'palette'}
     <SettingsView
       onback={back}
+      onexecute={execute}
       initialSection={view}
       {shortcut}
       {shortcutError}
@@ -561,6 +577,15 @@
             />
             {runMode ? 'Run' : calculation.kind === 'success' ? 'Copy' : 'Open'}
           </div>
+          {#if platform === 'windows' && (selectedCommand?.canRunAsAdmin || (selectedCommand?.action.type === 'native' && selectedCommand.action.name === 'notepad'))}
+            <div class="hint">
+              <KeyboardHint
+                keys={shortcutLabel($preferences.shortcuts.openAdmin).split(
+                  '+',
+                )}
+              /> Admin
+            </div>
+          {/if}
           <div class="hint">
             <KeyboardHint
               keys={shortcutLabel($preferences.shortcuts.close).split('+')}

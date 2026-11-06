@@ -5,9 +5,21 @@
   import CommandIcon from './CommandIcon.svelte';
   import CommandDetails from './CommandDetails.svelte';
 
+  import { preferences } from '../stores/preferences';
+  import { eventShortcut } from '../shortcuts';
+  let {
+    onexecute,
+  }: {
+    onexecute: (
+      command: import('../types/command').Command,
+      mode?: import('../native').LaunchMode,
+    ) => Promise<void>;
+  } = $props();
+  let drafts = $state<Record<string, string>>({});
   let query = $state('');
   let savedOnly = $state(false);
   let selectedKey = $state('');
+  let selectionIndex = $state(0);
   const entries = $derived(
     savedItems($commandCatalogue, $personalization).filter(
       (item) =>
@@ -18,13 +30,34 @@
     ),
   );
   const selected = $derived(
-    entries.find((item) => item.key === selectedKey) ?? entries[0],
+    entries.find((item) => item.key === selectedKey) ??
+      entries[Math.min(selectionIndex, entries.length - 1)],
   );
   $effect(() => {
-    if (selected && selectedKey !== selected.key) selectedKey = selected.key;
+    if (selected) {
+      selectedKey = selected.key;
+      selectionIndex = entries.findIndex((item) => item.key === selected.key);
+    }
   });
 
   function navigate(event: KeyboardEvent, index: number) {
+    const binding = eventShortcut(event);
+    if (
+      binding === $preferences.shortcuts.open ||
+      binding === $preferences.shortcuts.openAdmin
+    ) {
+      event.preventDefault();
+      event.stopPropagation();
+      const command = entries[index].command;
+      if (command && !event.repeat)
+        void onexecute(
+          command,
+          binding === $preferences.shortcuts.openAdmin
+            ? 'administrator'
+            : 'normal',
+        );
+      return;
+    }
     if (!['ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return;
     event.preventDefault();
     event.stopPropagation();
@@ -102,7 +135,12 @@
   </aside>
   <div class="command-controls">
     {#if selected}
-      {#key selected.key}<CommandDetails item={selected} />{/key}
+      {#key selected.key}<CommandDetails
+          item={selected}
+          {onexecute}
+          draft={drafts[selected.key] ?? ''}
+          ondraftchange={(value) => (drafts[selected.key] = value)}
+        />{/key}
     {:else}
       <div class="empty-detail">
         <Search size={25} strokeWidth={1.3} />

@@ -1,5 +1,11 @@
 # Verification recorded during implementation
 
+## v0.1.1 controls and administrator launching
+
+Implemented editable Shift+Enter administrator launching, native executable capability checks, preserved shortcut arguments/working directories, UAC cancellation without history updates, focus-loss protection while elevation is pending, and foreground restoration after cancellation/failure. Application controls now expose Open/admin and file Reveal/Copy path actions, retain per-item alias drafts, restore alias-input focus after removal, and retain the nearest remaining selection when filtered. Startup copy now explains the existing hidden sign-in and visible manual-launch behavior.
+
+Svelte/TypeScript and Windows Rust compilation passed. Automated tests remained paused. Both browser and native desktop review tools were unavailable (browser host unavailable; native pipe unavailable), so visual walkthroughs, actual sign-in, and interactive UAC consent/cancellation were not performed. Do not interpret installer build success as completion of those manual checks.
+
 ## Alt + Shift filter shortcuts — 2026-11-07
 
 Changed the six filter defaults to Alt + Shift + 1–6 and previous/next filter defaults to Alt + Shift + Left/Right. The existing shortcut editor and tooltips use these defaults automatically. A one-time preferences migration upgrades the previous Ctrl + Alt number bindings and Ctrl + Tab cycling bindings without changing custom bindings; a conflicting custom binding takes priority. The migration version is persisted so users can subsequently reassign any valid binding without it being migrated again. Existing shortcut regression sources and the README were updated. Tests remained paused as requested.

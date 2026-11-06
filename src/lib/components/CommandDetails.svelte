@@ -1,5 +1,13 @@
 <script lang="ts">
-  import { Pin, ArrowUp, ArrowDown, Plus, X, Tag } from '@lucide/svelte';
+  import {
+    Pin,
+    ArrowUp,
+    ArrowDown,
+    Plus,
+    X,
+    Tag,
+    ShieldCheck,
+  } from '@lucide/svelte';
   import CommandIcon from './CommandIcon.svelte';
   import {
     personalization,
@@ -9,8 +17,58 @@
     type SavedItem,
   } from '../stores/personalization';
 
-  let { item }: { item: SavedItem } = $props();
-  let alias = $state('');
+  import { fileAction, getLauncherStatus, type LaunchMode } from '../native';
+  import { onMount, tick } from 'svelte';
+  let {
+    item,
+    onexecute,
+    draft,
+    ondraftchange,
+  }: {
+    item: SavedItem;
+    onexecute: (
+      command: import('../types/command').Command,
+      mode?: LaunchMode,
+    ) => Promise<void>;
+    draft: string;
+    ondraftchange: (value: string) => void;
+  } = $props();
+  let alias = $derived(draft);
+  let windows = $state(false);
+  let launching = $state(false);
+  onMount(() => {
+    void getLauncherStatus()
+      .then((status) => (windows = status.platform === 'windows'))
+      .catch(() => {});
+  });
+  const canAdmin = $derived(
+    windows &&
+      !!item.command &&
+      (item.command.canRunAsAdmin ||
+        (item.command.action.type === 'native' &&
+          item.command.action.name === 'notepad')),
+  );
+  async function launch(mode: LaunchMode = 'normal') {
+    if (!item.command || launching) return;
+    launching = true;
+    try {
+      await onexecute(item.command, mode);
+    } finally {
+      launching = false;
+    }
+  }
+  async function fileControl(action: 'reveal' | 'copy-path') {
+    if (item.command?.action.type !== 'file' || launching) return;
+    launching = true;
+    try {
+      notice = await fileAction(item.command.action.fileId, action);
+      error = '';
+    } catch (reason) {
+      error = String(reason);
+    } finally {
+      launching = false;
+    }
+  }
   let error = $state('');
   let notice = $state('');
   const position = $derived($personalization.favorites.indexOf(item.key));
@@ -24,10 +82,16 @@
     notice = 'Aliases saved.';
     return true;
   }
+  async function removeAlias(value: string) {
+    if (updateAliases(item.aliases.filter((entry) => entry !== value))) {
+      await tick();
+      document.getElementById('new-command-alias')?.focus();
+    }
+  }
   function addAlias(event: SubmitEvent) {
     event.preventDefault();
     if (!alias.trim()) return;
-    if (updateAliases([...item.aliases, alias.trim()])) alias = '';
+    if (updateAliases([...item.aliases, alias.trim()])) ondraftchange('');
   }
 </script>
 
@@ -54,6 +118,27 @@
       Currently unavailable. Your favorites and aliases stay saved.
     </p>{/if}
 
+  <div class="launch-controls">
+    <button
+      disabled={!item.available || launching || !windows}
+      onclick={() => launch()}>Open</button
+    >
+    {#if item.category === 'Applications'}<button
+        disabled={!item.available || launching || !canAdmin}
+        title={canAdmin
+          ? 'Request administrator privileges through Windows'
+          : 'Available for supported Windows desktop applications only'}
+        onclick={() => launch('administrator')}
+        ><ShieldCheck size={13} />Run as administrator</button
+      >{/if}
+    {#if item.command?.action.type === 'file'}<button
+        disabled={launching || !windows}
+        onclick={() => fileControl('reveal')}>Reveal</button
+      ><button
+        disabled={launching || !windows}
+        onclick={() => fileControl('copy-path')}>Copy path</button
+      >{/if}
+  </div>
   <div class="control-section">
     <div class="favorite-row">
       <div>
@@ -104,9 +189,7 @@
           ><Tag size={11} /><span>{value}</span><button
             aria-label={'Remove alias ' + value}
             title="Remove alias"
-            onclick={() =>
-              updateAliases(item.aliases.filter((entry) => entry !== value))}
-            ><X size={12} /></button
+            onclick={() => removeAlias(value)}><X size={12} /></button
           ></span
         >
       {:else}<span class="no-aliases">No aliases yet.</span>{/each}
@@ -116,8 +199,9 @@
       <div class="alias-entry">
         <input
           id="new-command-alias"
-          bind:value={alias}
-          oninput={() => {
+          value={alias}
+          oninput={(event) => {
+            ondraftchange(event.currentTarget.value);
             error = '';
             notice = '';
           }}
@@ -145,6 +229,12 @@
 </section>
 
 <style>
+  .launch-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+    margin-top: 12px;
+  }
   .detail-header {
     display: flex;
     align-items: center;

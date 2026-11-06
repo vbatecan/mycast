@@ -22,6 +22,7 @@ pub enum NativeAction {
 
 #[derive(Serialize)]
 pub struct ActionResult {
+    cancelled: bool,
     message: String,
 }
 
@@ -51,7 +52,33 @@ pub fn copy_text(app: AppHandle, text: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn execute_native(app: AppHandle, action: NativeAction) -> Result<ActionResult, String> {
+pub async fn execute_native(
+    app: AppHandle,
+    action: NativeAction,
+    mode: Option<crate::elevation::LaunchMode>,
+) -> Result<ActionResult, String> {
+    if matches!(mode, Some(crate::elevation::LaunchMode::Administrator)) {
+        if !matches!(action, NativeAction::Notepad) {
+            return Err("Administrator launching is unavailable for this action.".into());
+        }
+        let result = tauri::async_runtime::spawn_blocking(|| {
+            let _guard = crate::elevation::Pending::new()?;
+            crate::elevation::notepad()
+        })
+        .await
+        .map_err(|error| error.to_string())?;
+        if result.is_err() || matches!(result, Ok(false)) {
+            crate::elevation::restore(&app);
+        }
+        return result.map(|completed| ActionResult {
+            cancelled: !completed,
+            message: if completed {
+                "Opening Notepad as administrator".into()
+            } else {
+                "Administrator launch cancelled".into()
+            },
+        });
+    }
     let (value, message) = match action {
         NativeAction::CopyDate => (Local::now().format("%Y-%m-%d").to_string(), "Date copied"),
         NativeAction::CopyTime => (Local::now().format("%H:%M:%S").to_string(), "Time copied"),
@@ -60,6 +87,7 @@ pub fn execute_native(app: AppHandle, action: NativeAction) -> Result<ActionResu
     };
     copy_text(app, value)?;
     Ok(ActionResult {
+        cancelled: false,
         message: message.into(),
     })
 }
@@ -110,6 +138,7 @@ fn open_native(app: &AppHandle, action: NativeAction) -> Result<ActionResult, St
         .spawn()
         .map_err(|error| format!("Could not open {label}: {error}"))?;
     Ok(ActionResult {
+        cancelled: false,
         message: format!("Opened {label}"),
     })
 }

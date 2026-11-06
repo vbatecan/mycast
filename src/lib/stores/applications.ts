@@ -76,6 +76,7 @@ export const installedCommands = derived(state, (value) =>
       (application.source === 'start-menu'
         ? 'Start Menu application'
         : 'Windows application'),
+    canRunAsAdmin: application.canRunAsAdmin,
     category: 'Applications',
     icon: 'app-window',
     keywords: [...application.keywords, application.name, 'app', 'application'],

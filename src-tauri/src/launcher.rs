@@ -15,6 +15,7 @@ use tauri_plugin_global_shortcut::{GlobalShortcutExt, Modifiers, Shortcut};
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LauncherStatus {
+    pub platform: String,
     pub shortcut: Option<String>,
     pub shortcut_error: Option<String>,
     pub version: String,
@@ -191,6 +192,7 @@ pub fn get_launcher_status(
         )
     };
     LauncherStatus {
+        platform: std::env::consts::OS.into(),
         shortcut: registration.current.map(display_shortcut),
         shortcut_error: registration.error.clone(),
         version: app.package_info().version.to_string(),

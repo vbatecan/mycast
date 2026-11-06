@@ -69,6 +69,7 @@ pub struct Application {
     pub description: String,
     pub source: ApplicationSource,
     pub keywords: Vec<String>,
+    pub can_run_as_admin: bool,
 }
 
 #[derive(Clone, Serialize)]
@@ -79,6 +80,7 @@ pub struct ApplicationList {
 
 #[derive(Serialize)]
 pub struct ApplicationLaunchResult {
+    pub cancelled: bool,
     pub message: String,
 }
 
@@ -169,6 +171,7 @@ pub async fn list_applications(
             .and_then(|ids| ids.get(&candidate.identity))
             .cloned()
             .unwrap_or_else(|| format!("app_{}", Uuid::new_v4()));
+        let can_run_as_admin = platform::can_elevate(&candidate.target);
         launches.insert(id.clone(), (candidate.name.clone(), candidate.target));
         ids_by_identity.insert(candidate.identity, id.clone());
         applications.push(Application {
@@ -178,6 +181,7 @@ pub async fn list_applications(
             description: candidate.description,
             source: candidate.source,
             keywords: candidate.keywords,
+            can_run_as_admin,
         });
     }
     applications.sort_by_cached_key(|application| {
@@ -201,8 +205,10 @@ pub async fn list_applications(
 
 #[tauri::command]
 pub async fn launch_application(
+    app: tauri::AppHandle,
     catalog: State<'_, ApplicationCatalog>,
     id: String,
+    mode: Option<crate::elevation::LaunchMode>,
 ) -> Result<ApplicationLaunchResult, String> {
     if id.len() > 64 {
         return Err("Invalid application ID.".into());
@@ -217,12 +223,33 @@ pub async fn launch_application(
                 "This application is no longer in the catalogue. Refresh applications and try again.",
             )?
     };
+    let elevated = matches!(mode, Some(crate::elevation::LaunchMode::Administrator));
+    if elevated {
+        let result = tauri::async_runtime::spawn_blocking(move || {
+            let _guard = crate::elevation::Pending::new()?;
+            platform::elevate(&target)
+        })
+        .await
+        .map_err(|e| e.to_string())?;
+        if result.is_err() || matches!(result, Ok(false)) {
+            crate::elevation::restore(&app);
+        }
+        return result.map(|completed| ApplicationLaunchResult {
+            message: if completed {
+                format!("Opening {name} as administrator")
+            } else {
+                "Administrator launch cancelled".into()
+            },
+            cancelled: !completed,
+        });
+    }
     tauri::async_runtime::spawn_blocking(move || platform::launch(&target))
         .await
         .map_err(|error| format!("Application launch could not finish: {error}"))?
         .map_err(|error| format!("Could not open {name}: {error}"))?;
     Ok(ApplicationLaunchResult {
         message: format!("Opening {name}"),
+        cancelled: false,
     })
 }
 
@@ -701,6 +728,51 @@ mod platform {
         collector.finish()
     }
 
+    fn elevated_target(target: &LaunchTarget) -> Result<(String, String, String), String> {
+        let LaunchTarget::Shortcut(path) = target else {
+            return Err("Packaged applications do not support administrator launching.".into());
+        };
+        let _apartment = ComApartment::initialize()?;
+        let metadata = fs::symlink_metadata(path).map_err(|e| e.to_string())?;
+        if !metadata.is_file() || metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT.0 != 0 {
+            return Err("Shortcut is unavailable or changed. Refresh applications.".into());
+        }
+        let encoded = wide_path(path)?;
+        let item: Option<IShellItem2> =
+            unsafe { SHCreateItemFromParsingName(PCWSTR(encoded.as_ptr()), None) }.ok();
+        if item.as_ref().and_then(packaged_aumid).is_some() {
+            return Err("Packaged applications do not support administrator launching.".into());
+        }
+        let link: IShellLinkW = unsafe { CoCreateInstance(&ShellLink, None, CLSCTX_INPROC_SERVER) }
+            .map_err(|e| e.to_string())?;
+        let persist: IPersistFile = link.cast().map_err(|e| e.to_string())?;
+        unsafe { persist.Load(PCWSTR(encoded.as_ptr()), STGM_READ) }.map_err(|e| e.to_string())?;
+        let mut executable = vec![0u16; TEXT_BUFFER];
+        let mut arguments = vec![0u16; TEXT_BUFFER];
+        let mut directory = vec![0u16; TEXT_BUFFER];
+        unsafe { link.GetPath(&mut executable, ptr::null_mut(), 0) }.map_err(|e| e.to_string())?;
+        unsafe { link.GetArguments(&mut arguments) }.map_err(|e| e.to_string())?;
+        unsafe { link.GetWorkingDirectory(&mut directory) }.map_err(|e| e.to_string())?;
+        let executable = text(&executable);
+        let path = Path::new(&executable);
+        if !path.is_absolute()
+            || !path.is_file()
+            || !path
+                .extension()
+                .is_some_and(|e| e.eq_ignore_ascii_case("exe"))
+        {
+            return Err("Administrator launching requires an available desktop executable.".into());
+        }
+        Ok((executable, text(&arguments), text(&directory)))
+    }
+    pub(super) fn can_elevate(target: &LaunchTarget) -> bool {
+        elevated_target(target).is_ok()
+    }
+    pub(super) fn elevate(target: &LaunchTarget) -> Result<bool, String> {
+        let (exe, args, directory) = elevated_target(target)?;
+        crate::elevation::run(&exe, &args, &directory)
+    }
+
     pub(super) fn launch(target: &LaunchTarget) -> Result<(), String> {
         let _apartment = ComApartment::initialize()?;
         match target {
@@ -755,6 +827,12 @@ mod platform {
 mod platform {
     use super::{Discovery, LaunchTarget};
 
+    pub(super) fn can_elevate(_: &LaunchTarget) -> bool {
+        false
+    }
+    pub(super) fn elevate(_: &LaunchTarget) -> Result<bool, String> {
+        Err("Administrator launching requires Windows.".into())
+    }
     pub(super) fn discover() -> Discovery {
         Discovery {
             candidates: Vec::new(),

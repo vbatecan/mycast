@@ -4,10 +4,12 @@ import {
   launchApplication,
   fileAction,
   runShellCommand,
+  type LaunchMode,
 } from '../native';
 import type { Command } from '../types/command';
 
 export type ExecutionResult =
+  | { type: 'cancelled'; message: string }
   | { type: 'message'; message: string }
   | { type: 'view'; view: 'settings' | 'about' | 'appearance' }
   | { type: 'calculator-mode' };
@@ -15,8 +17,28 @@ export type ExecutionResult =
 /** Returns UI intent; callers retain ownership of navigation, focus, and errors. */
 export async function executeCommand(
   command: Command,
+  mode: LaunchMode = 'normal',
 ): Promise<ExecutionResult> {
   const action = command.action;
+  if (mode === 'administrator') {
+    if (!(
+      command.canRunAsAdmin ||
+      (action.type === 'native' && action.name === 'notepad')
+    ))
+      throw new Error('Administrator launching is unavailable for this item.');
+    const result =
+      action.type === 'application'
+        ? await launchApplication(action.applicationId, mode)
+        : action.type === 'native'
+          ? await executeNative(action.name, mode)
+          : null;
+    if (!result)
+      throw new Error('Administrator launching is unavailable for this item.');
+    return {
+      type: result.cancelled ? 'cancelled' : 'message',
+      message: result.message,
+    };
+  }
   switch (action.type) {
     case 'file':
       return {

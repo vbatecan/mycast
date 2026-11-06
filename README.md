@@ -26,6 +26,7 @@ GitHub Actions builds Windows and Linux packages on pushes to `main` and pull re
 ## Use
 
 - Alt + Space toggles the launcher. General preferences let you record, save, cancel, or reset this shortcut. Conflicts keep the working shortcut. Startup tries your saved shortcut, then Alt + Space and Ctrl + Alt + Space as recovery options. The tray can reopen or quit Mycast.
+- Shift + Enter opens supported Windows desktop applications as administrator through the Windows UAC prompt. This separate binding is editable in Shortcuts. Packaged apps and unsupported actions cannot be elevated; Mycast itself stays non-elevated.
 - Type to search; Up/Down wrap results, Enter executes, Escape hides. Escape from Preferences returns to commands. Losing focus hides the window.
 - Type arithmetic such as `(50 + 20) / 2`; Enter copies the result. Display uses 12 significant digits and standard floating point arithmetic.
 - Search file and folder names in All or the Files filter. Enter opens a result. File favorites, aliases, and Recents persist. Preferences → Files & Run manages search folders, exclusions, indexing status, and the terminal working folder. See [Files and PowerShell](docs/files-and-run.md).

@@ -11,6 +11,7 @@ export const shortcutActions = [
   ['nextItem', 'Next result', 'ArrowDown'],
   ['previousItem', 'Previous result', 'ArrowUp'],
   ['open', 'Open selected item', 'Enter'],
+  ['openAdmin', 'Open as administrator', 'Shift+Enter'],
   ['close', 'Close / Back', 'Escape'],
 ] as const;
 export type ShortcutAction = (typeof shortcutActions)[number][0];

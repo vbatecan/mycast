@@ -32,7 +32,7 @@
         'Use a modified key or a navigation key. Keep typing, text editing, and system shortcuts available.';
       return;
     }
-    if (binding === launcherShortcut) {
+    if (binding === launcherShortcut?.replace(/\s+/g, '')) {
       error = 'This shortcut already opens Mycast.';
       return;
     }

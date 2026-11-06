@@ -23,12 +23,17 @@
 
   let {
     onback,
+    onexecute,
     initialSection = 'settings',
     shortcut,
     shortcutError,
     version,
     onstatuschange = () => {},
   }: {
+    onexecute: (
+      command: import('../types/command').Command,
+      mode?: import('../native').LaunchMode,
+    ) => Promise<void>;
     onback: () => void;
     initialSection?: 'settings' | 'about' | 'appearance';
     shortcut: string | null;
@@ -269,7 +274,7 @@
         launcherShortcut={shortcut}
       />
     {:else if active === 'Commands'}
-      <CommandsSettings />
+      <CommandsSettings {onexecute} />
     {:else if active === 'Files & Run'}
       <FileSettings />
     {:else if active === 'Appearance'}

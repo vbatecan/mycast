@@ -1,6 +1,7 @@
 mod appearance;
 mod applications;
 mod commands;
+mod elevation;
 mod files;
 mod launcher;
 
@@ -140,6 +141,9 @@ pub fn run() {
         })
         .on_window_event(|window, event| match event {
             WindowEvent::Focused(false) => {
+                if elevation::is_pending() {
+                    return;
+                }
                 launcher::end_capture(window.app_handle());
                 if !has_owned_foreground(window) {
                     let _ = window.emit("launcher-hidden", ());

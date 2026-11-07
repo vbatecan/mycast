@@ -67,7 +67,12 @@ export async function observeFileIndex(): Promise<() => void> {
     }));
     void refreshSavedFiles().catch(() => {});
   });
-  fileStatus.set(await getFileStatus());
+  try {
+    fileStatus.set(await getFileStatus());
+  } catch (reason) {
+    stop();
+    throw reason;
+  }
   const unsubscribe = personalization.subscribe(() => {
     void refreshSavedFiles().catch(() => {});
   });

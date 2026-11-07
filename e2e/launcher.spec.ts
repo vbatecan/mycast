@@ -69,7 +69,7 @@ test('no-results state and clearing query recover selection', async ({
 }) => {
   await page.getByRole('combobox').fill('zzzzzzzzzzzzzzzzz');
   await expect(
-    page.getByRole('heading', { name: 'No commands found' }),
+    page.getByRole('heading', { name: 'No matches for “zzzzzzzzzzzzzzzzz”' }),
   ).toBeVisible();
   await page.screenshot({
     animations: 'disabled',

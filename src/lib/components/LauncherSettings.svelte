@@ -62,11 +62,18 @@
           (event: { payload: string }) => {
             if (recording) {
               candidate = event.payload;
+              error = '';
               recording = false;
               void setShortcutCapture(false).catch((reason) => {
                 error = message(reason);
               });
             }
+          },
+        ],
+        [
+          'launcher-shortcut-capture-error',
+          (event: { payload: string }) => {
+            if (recording) error = event.payload;
           },
         ],
         [
@@ -100,11 +107,16 @@
   async function record() {
     error = '';
     candidate = '';
+    recording = true;
     try {
       await setShortcutCapture(true);
-      recording = true;
+      if (disposed || !recording) {
+        await setShortcutCapture(false);
+        return;
+      }
       recorder?.focus();
     } catch (reason) {
+      recording = false;
       error = message(reason);
     }
   }
@@ -112,6 +124,8 @@
     if (!recording) return;
     event.preventDefault();
     event.stopPropagation();
+    // Windows input is captured before the OS handles Alt/Windows shortcuts.
+    if (status?.platform === 'windows') return;
     if (event.key === 'Escape') {
       void cancel();
       return;
@@ -202,7 +216,7 @@
       onblur={() => {
         if (recording) void cancel();
       }}
-      disabled={!isNative() || !listenersReady || busy}
+      disabled={!isNative() || !status || !listenersReady || busy}
       aria-label={recording
         ? 'Press a launcher shortcut, Escape to cancel'
         : 'Record launcher shortcut'}

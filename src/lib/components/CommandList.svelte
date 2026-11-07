@@ -3,6 +3,7 @@
   import type { Command } from '../types/command';
   let {
     commands,
+    busy = false,
     selectedIndex,
     showDescriptions,
     query,
@@ -11,6 +12,7 @@
     onexecute,
   }: {
     commands: Command[];
+    busy?: boolean;
     selectedIndex: number;
     showDescriptions: boolean;
     query: string;
@@ -36,6 +38,7 @@
   id="command-results"
   role="listbox"
   aria-label="Commands"
+  aria-busy={busy}
 >
   {#each commands as command, index (command.id)}
     {#if !query.trim() && (index === 0 || (sectionFor?.(commands[index - 1]) ?? commands[index - 1].category) !== (sectionFor?.(command) ?? command.category))}

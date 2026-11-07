@@ -1,6 +1,6 @@
 [package]
 name = "mycast"
-version = "0.3.0"
+version = "0.3.1"
 description = "A small, keyboard-first Windows command launcher"
 authors = ["Mycast contributors"]
 edition = "2024"
@@ -46,6 +46,7 @@ windows = { version = "0.62.2", features = [
     "Win32_System_Com",
     "Win32_System_Registry",
     "Win32_UI_Shell",
+    "Win32_UI_Input_KeyboardAndMouse",
     "Win32_UI_WindowsAndMessaging",
 ] }
 

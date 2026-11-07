@@ -39,7 +39,7 @@
       mode?: import('../native').LaunchMode,
     ) => Promise<void>;
     onback: () => void;
-    initialSection?: 'settings' | 'about' | 'appearance' | 'updates';
+    initialSection?: 'settings' | 'about' | 'appearance' | 'updates' | 'files';
     shortcut: string | null;
     shortcutError: string | null;
     version: string;
@@ -78,7 +78,9 @@
           ? 'About'
           : initialSection === 'appearance'
             ? 'Appearance'
-            : 'General',
+            : initialSection === 'files'
+              ? 'Files & Run'
+              : 'General',
     ),
   );
   let backButton: HTMLButtonElement;

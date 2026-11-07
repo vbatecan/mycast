@@ -8,6 +8,8 @@ mod files;
 mod launcher;
 mod modules;
 mod search;
+#[cfg(windows)]
+mod shortcut_capture;
 
 use tauri::{
     AppHandle, Emitter, Manager, PhysicalPosition, WindowEvent,

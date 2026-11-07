@@ -1,5 +1,21 @@
 # Verification recorded during implementation
 
+## v0.3.1 shortcut capture, updater permissions, and search states
+
+Added native Windows keyboard capture before system-menu and Windows-key handling, including consumed key releases, cancellation, already-held modifiers, and parser-compatible bindings. Granted only the resource-close capability required by updater cleanup.
+
+File results remain available for local filtering during the next native search. A dedicated footer status area delays progress by 200 ms and preserves keyboard hints. Empty states distinguish filters, folder setup, loading, indexing, and errors. Recovery actions retry the current query or open Files & Run directly; errors expose technical details only on request. Failed file-index initialization releases its listener before retry. Indexing counts remain in Settings only.
+
+Checks passed:
+
+- Svelte/TypeScript: zero errors and warnings; production frontend build.
+- 25 frontend unit tests, including the updater capability regression.
+- 13 native Rust tests; one opt-in search profiling test ignored. Capture tests cover left/right Alt and Windows modifiers, releases after completion, Escape/focus cancellation, held modifiers, supported key parsing, and actual Windows hook registration without generating desktop input.
+- 13 focused browser tests across launcher navigation/layout, file-search continuity, stale response rejection, footer/hint positioning, filter-specific empty states, folder settings navigation, indexing-count visibility, error details, query retry, file-listener cleanup, and application-refresh recovery.
+- Screenshots reviewed: `artifacts/indexing-state.png` and `artifacts/search-error-details.png`.
+
+Four older launcher browser tests fail on both these changes and the original code: browser calculator expectations, desktop-only dispatch expectations, the old alias editor flow, and history expectations that include About. A separate previously checked custom Back-shortcut browser test also fails on the original code. These failures are not covered up by the focused passing suite. Physical-key desktop testing and an end-to-end signed updater installation remain outstanding.
+
 ## v0.2.0 fend, currency, modules, and signed updates
 
 Replaced the launcher's runtime arithmetic evaluation with a lazy frontend provider calling the native fend-core 1.5.9 engine. Evaluation uses fresh contexts, input/output bounds, a cooperative 150 ms deadline, and a single-evaluation gate. Added lazy Frankfurter currency conversion with abortable requests, validated rates, six-hour local caching, rate dates, and offline fallback. Amounts stay local. Currency can run independently of the calculator module.

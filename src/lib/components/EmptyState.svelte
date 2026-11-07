@@ -1,15 +1,166 @@
 <script lang="ts">
-  import { SearchX } from '@lucide/svelte';
-  let { query }: { query: string } = $props();
+  import {
+    SearchX,
+    Star,
+    Clock,
+    FolderSearch,
+    CircleAlert,
+    Search,
+  } from '@lucide/svelte';
+  import type { CommandScope } from '../stores/applications';
+  import { preferences } from '../stores/preferences';
+  import { shortcutLabel } from '../shortcuts';
+  import KeyboardHint from './KeyboardHint.svelte';
+  let {
+    query,
+    scope = 'all',
+    state = 'empty',
+    onsearchall,
+    onmanagefiles,
+    onretry,
+  }: {
+    query: string;
+    scope?: CommandScope;
+    state?:
+      | 'empty'
+      | 'searching'
+      | 'indexing'
+      | 'no-folders'
+      | 'file-error'
+      | 'application-error'
+      | 'applications-loading'
+      | 'desktop';
+    onsearchall?: () => void;
+    onmanagefiles?: () => void;
+    onretry?: () => void;
+  } = $props();
+  const text = $derived(
+    query.trim().length > 45 ? query.trim().slice(0, 45) + '…' : query.trim(),
+  );
+  const content = $derived.by(() => {
+    if (state === 'applications-loading')
+      return {
+        icon: Search,
+        title: 'Finding your applications',
+        body: 'Results will appear here when your applications are ready.',
+      };
+    if (state === 'file-error')
+      return {
+        icon: CircleAlert,
+        title: 'File search couldn’t finish',
+        body: 'Try again or check your search folders in Settings.',
+      };
+    if (state === 'application-error')
+      return {
+        icon: CircleAlert,
+        title: 'Applications couldn’t refresh',
+        body: 'Try refreshing your installed applications again.',
+      };
+    if (state === 'no-folders')
+      return {
+        icon: FolderSearch,
+        title: 'Choose where to search',
+        body: 'Add search folders in Settings to find your files here.',
+      };
+    if (state === 'indexing')
+      return {
+        icon: FolderSearch,
+        title: 'Preparing file search',
+        body: 'Results will appear as your folders are indexed.',
+      };
+    if (state === 'searching')
+      return {
+        icon: Search,
+        title: 'Finding your files',
+        body: 'Results will appear here when the search finishes.',
+      };
+    if (state === 'desktop')
+      return {
+        icon: FolderSearch,
+        title: 'Find files in the desktop app',
+        body: 'Open Mycast on your computer to search your folders.',
+      };
+    if (!text && scope === 'favorites')
+      return {
+        icon: Star,
+        title: 'Your favorites go here',
+        body: 'Pin a result to keep it close.',
+      };
+    if (!text && scope === 'recents')
+      return {
+        icon: Clock,
+        title: 'Your recent items go here',
+        body: 'Apps and files you open will appear here.',
+      };
+    if (scope === 'files')
+      return {
+        icon: FolderSearch,
+        title: text ? 'No matching files' : 'No files to show',
+        body: text
+          ? `Nothing matches “${text}” in your search folders.`
+          : 'Try typing part of a filename or check your search folders.',
+      };
+    const names = {
+      applications: 'applications',
+      commands: 'commands',
+      favorites: 'favorites',
+      recents: 'recent items',
+      all: 'results',
+    };
+    if (text)
+      return {
+        icon: SearchX,
+        title:
+          scope === 'all'
+            ? `No matches for “${text}”`
+            : `No matching ${names[scope]}`,
+        body:
+          scope === 'all'
+            ? 'Try a shorter name or different spelling.'
+            : `Nothing matches “${text}” in this filter. Try a shorter name or search All.`,
+      };
+    return {
+      icon: Search,
+      title:
+        scope === 'all' ? 'Ready when you are' : `No ${names[scope]} to show`,
+      body: 'Search by name or try another filter.',
+    };
+  });
+  const Icon = $derived(content.icon);
+  const showFolders = $derived(
+    !!onmanagefiles &&
+      (state === 'no-folders' ||
+        state === 'file-error' ||
+        state === 'indexing' ||
+        (state === 'empty' && scope === 'files')),
+  );
 </script>
 
-<div class="empty">
-  <span class="empty-icon"><SearchX size={25} strokeWidth={1.4} /></span>
-  <h2>No commands found</h2>
-  <p>
-    Nothing matches “{query.length > 45 ? query.slice(0, 45) + '…' : query}”.
-  </p>
-  <span>Try an app, a filename, a calculation, or &gt; to run a command.</span>
+<div class="empty" role="status">
+  <span class="empty-icon" aria-hidden="true"
+    ><Icon size={25} strokeWidth={1.4} /></span
+  >
+  <h2>{content.title}</h2>
+  <p>{content.body}</p>
+  {#if state === 'empty' && !text && scope === 'favorites'}
+    <span class="pin-hint"
+      ><KeyboardHint
+        keys={shortcutLabel($preferences.shortcuts.pin).split('+')}
+      /> Pin selected result</span
+    >
+  {/if}
+  {#if (onretry && ['file-error', 'application-error'].includes(state)) || showFolders || (state === 'empty' && scope !== 'all' && text)}
+    <div class="actions">
+      {#if onretry && ['file-error', 'application-error'].includes(state)}<button
+          onclick={onretry}>Retry</button
+        >{/if}
+      {#if showFolders}<button onclick={onmanagefiles}>Manage folders</button
+        >{/if}
+      {#if state === 'empty' && scope !== 'all' && text && onsearchall}<button
+          onclick={onsearchall}>Search All</button
+        >{/if}
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -21,7 +172,7 @@
     justify-content: center;
     flex-direction: column;
     padding: 25px;
-    animation: appear calc(150ms * var(--motion-scale, 1)) ease-out;
+    overflow-y: auto;
   }
   .empty-icon {
     display: grid;
@@ -46,19 +197,28 @@
     overflow-wrap: anywhere;
     text-align: center;
   }
-  .empty > span:last-child {
+  .pin-hint {
+    display: flex;
+    align-items: center;
+    gap: 7px;
     font-size: var(--text-11);
     color: var(--muted);
     text-align: center;
   }
-  @keyframes appear {
-    from {
-      opacity: 0;
-      transform: translateY(3px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
+  .actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 14px;
+  }
+  button {
+    padding: 7px 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--surface);
+    color: var(--text);
+    font-size: var(--text-11);
+  }
+  button:hover {
+    background: var(--hover);
   }
 </style>

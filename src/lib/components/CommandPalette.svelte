@@ -9,7 +9,6 @@
     Command as CommandIcon,
     ArrowDown,
     ArrowUp,
-    Check,
     CircleAlert,
     SlidersHorizontal,
     Sparkles,
@@ -17,6 +16,7 @@
   import SearchInput from './SearchInput.svelte';
   import CommandList from './CommandList.svelte';
   import EmptyState from './EmptyState.svelte';
+  import FooterStatus from './FooterStatus.svelte';
   import SettingsView from './SettingsView.svelte';
   import KeyboardHint from './KeyboardHint.svelte';
   import CatalogueBar from './CatalogueBar.svelte';
@@ -68,7 +68,7 @@
   let selectedKey = $state('');
   let searchTimestamp = $state(Date.now());
   let view = $state<
-    'palette' | 'settings' | 'about' | 'appearance' | 'updates'
+    'palette' | 'settings' | 'about' | 'appearance' | 'updates' | 'files'
   >('palette');
   let scope = $state<CommandScope>('all');
   let input = $state<HTMLInputElement>();
@@ -83,7 +83,19 @@
   let filesReady = $state(false);
   let fileMatches = $state<Command[]>([]);
   let fileSearchError = $state('');
+  let fileSetupError = $state('');
+  let fileRetry = $state(0);
+  let fileObserverRetry = $state(0);
   let fileSearching = $state(false);
+  let fileSearchSlow = $state(false);
+  let applicationRefreshSlow = $state(false);
+  let fileMatchesScope: CommandScope = 'all';
+  $effect(() => {
+    fileSearchSlow = false;
+    if (!filePending) return;
+    const timer = setTimeout(() => (fileSearchSlow = true), 200);
+    return () => clearTimeout(timer);
+  });
   let requestSequence = Date.now() * 1000;
   let aiPanel = $state<{ submit: () => void }>();
   let aiMode = $derived($modules.ai && query.trimStart().startsWith('??'));
@@ -102,6 +114,109 @@
   });
   let runMode = $derived($modules.run && query.trimStart().startsWith('>'));
   let runText = $derived(runMode ? query.trimStart().slice(1).trimStart() : '');
+  const fileContext = $derived(
+    isNative() &&
+      $modulesReady &&
+      $modules.files &&
+      shown &&
+      view === 'palette' &&
+      !runMode &&
+      !webMode &&
+      !aiMode &&
+      ['all', 'files', 'favorites', 'recents'].includes(scope),
+  );
+  const fileIssue = $derived(fileSetupError || fileSearchError);
+  const noFileRoots = $derived(
+    isNative() && $fileStatus.preferences?.roots.length === 0,
+  );
+  const filePending = $derived(
+    fileContext &&
+      !noFileRoots &&
+      (fileSearching || (!filesReady && !fileSetupError)),
+  );
+  const fileIndexing = $derived(
+    fileContext &&
+      !noFileRoots &&
+      ['indexing', 'reconciling'].includes($fileStatus.state),
+  );
+  const applicationIssue = $derived(
+    $modules.applications &&
+      !runMode &&
+      !webMode &&
+      !aiMode &&
+      ['all', 'applications', 'favorites', 'recents'].includes(scope)
+      ? $applications.error
+      : null,
+  );
+  function manageFileSettings() {
+    view = 'files';
+  }
+  const applicationPending = $derived(
+    $modules.applications &&
+      $applications.status === 'loading' &&
+      !runMode &&
+      !webMode &&
+      !aiMode &&
+      ['all', 'applications', 'favorites', 'recents'].includes(scope),
+  );
+  $effect(() => {
+    applicationRefreshSlow = false;
+    if (!applicationPending) return;
+    const timer = setTimeout(() => (applicationRefreshSlow = true), 200);
+    return () => clearTimeout(timer);
+  });
+  function retryFiles() {
+    if (filesReady) fileRetry += 1;
+    else fileObserverRetry += 1;
+    void focusSearch();
+  }
+  function retryApplications() {
+    void loadApplications(true);
+    void focusSearch();
+  }
+  const footerNotice = $derived.by(() => {
+    if (message)
+      return {
+        text: message,
+        tone: isError ? ('error' as const) : ('success' as const),
+      };
+    if (fileContext && fileIssue)
+      return {
+        text: 'File search unavailable',
+        tone: 'error' as const,
+        detail: fileIssue,
+        description:
+          'File search couldn’t finish. Try again or check your search folders in Settings.',
+        onretry: retryFiles,
+        onsettings: manageFileSettings,
+        settingsLabel: 'Manage folders',
+      };
+    if (applicationIssue)
+      return {
+        text: 'Applications couldn’t refresh',
+        tone: 'error' as const,
+        detail: applicationIssue,
+        description:
+          'Your other results are still available. Try refreshing your installed applications again.',
+        onretry: retryApplications,
+      };
+    if (fileIndexing)
+      return { text: 'Preparing file search…', tone: 'progress' as const };
+    if (fileSearchSlow)
+      return { text: 'Searching files…', tone: 'progress' as const };
+    if (applicationRefreshSlow)
+      return { text: 'Refreshing applications…', tone: 'progress' as const };
+    if (fileContext && $fileStatus.warnings.length)
+      return {
+        text: 'Some folders need attention',
+        tone: 'warning' as const,
+        description:
+          'Some folders may be unavailable. Check your search folders in Settings.',
+        onsettings: manageFileSettings,
+        settingsLabel: 'Manage folders',
+      };
+    return { text: '' };
+  });
   let messageTimer: ReturnType<typeof setTimeout> | undefined;
   let hideTimer: ReturnType<typeof setTimeout> | undefined;
   let scopedCatalogue = $derived(
@@ -201,6 +316,8 @@
     };
   });
   $effect(() => {
+    fileObserverRetry;
+    fileSetupError = '';
     if (!$modulesReady || !isNative() || !shown || !$modules.files) return;
     let cancelled = false;
     let stop: (() => void) | undefined;
@@ -212,7 +329,9 @@
           filesReady = true;
         }
       })
-      .catch((reason) => notify(String(reason), true));
+      .catch((reason) => {
+        if (!cancelled) fileSetupError = String(reason);
+      });
     return () => {
       cancelled = true;
       stop?.();
@@ -275,12 +394,14 @@
   });
   $effect(() => {
     const text = query;
+    fileRetry;
     const selectedScope = scope;
     const state = $personalization;
     $fileStatus.revision;
     const active =
       $modules.files &&
       filesReady &&
+      !noFileRoots &&
       shown &&
       view === 'palette' &&
       !runMode &&
@@ -289,11 +410,10 @@
       ['all', 'files', 'favorites', 'recents'].includes(selectedScope);
     const requestId = ++requestSequence;
     untrack(() => {
-      if (
-        !active ||
-        fileMatches.some((command) => command.searchQuery !== text)
-      )
-        fileMatches = [];
+      // Keep matching rows mounted while the next response arrives. The local
+      // search still filters them against the current query in the meantime.
+      if (!active || fileMatchesScope !== selectedScope) fileMatches = [];
+      fileMatchesScope = selectedScope;
     });
     fileSearchError = '';
     fileSearching = active;
@@ -644,30 +764,6 @@
           $preferences.shortcuts.open,
         )} to execute
       </div>
-    {:else if fileSearchError || (['all', 'files', 'favorites', 'recents'].includes(scope) && isNative() && (fileSearching || ['indexing', 'reconciling'].includes($fileStatus.state)))}
-      <div
-        class="file-search-status"
-        role="status"
-        title={$fileStatus.warnings.join('\n')}
-      >
-        {fileSearchError ||
-          ($fileStatus.state === 'indexing' ||
-          $fileStatus.state === 'reconciling'
-            ? 'Indexing file names…'
-            : fileSearching
-              ? 'Searching files…'
-              : '')}
-        {#if $fileStatus.warnings.length}<span>
-            · {$fileStatus.warnings.length} indexing notice(s)</span
-          >{/if}
-      </div>
-    {/if}
-    {#if $applications.error}
-      <div class="discovery-error" role="status" title={$applications.error}>
-        <CircleAlert size={12} /><span
-          >Applications could not refresh. {$applications.error}</span
-        >
-      </div>
     {/if}
     {#if aiMode}<AiPanel
         bind:this={aiPanel}
@@ -682,9 +778,17 @@
         </div>
       </div>
       <div class="calculator-tip"><Sparkles size={14} /> Try (50 + 20) / 2</div>
+    {:else if scope === 'files' && noFileRoots}
+      <EmptyState
+        {query}
+        {scope}
+        state="no-folders"
+        onmanagefiles={manageFileSettings}
+      />
     {:else if results.length}
       <CommandList
         commands={results}
+        busy={filePending || applicationPending}
         {selectedIndex}
         showDescriptions={$preferences.showDescriptions}
         {query}
@@ -701,59 +805,81 @@
         onselect={(index) => (selectedKey = selectionKey(results[index]))}
         onexecute={execute}
       />
-    {:else if scope === 'files' && isNative() && (fileSearching || $fileStatus.state !== 'ready')}
-      <div class="files-loading" role="status">
-        {$fileStatus.state === 'indexing' || $fileStatus.state === 'reconciling'
-          ? 'Indexing your folders…'
-          : 'Searching files…'}
-      </div>
-    {:else}<EmptyState {query} />{/if}
+    {:else if fileContext && fileIssue}
+      <EmptyState
+        {query}
+        {scope}
+        state="file-error"
+        onretry={retryFiles}
+        onmanagefiles={manageFileSettings}
+      />
+    {:else if scope === 'applications' && applicationIssue}
+      <EmptyState
+        {query}
+        {scope}
+        state="application-error"
+        onretry={retryApplications}
+      />
+    {:else if fileIndexing}
+      <EmptyState
+        {query}
+        {scope}
+        state="indexing"
+        onmanagefiles={manageFileSettings}
+      />
+    {:else if applicationPending && applicationRefreshSlow}
+      <EmptyState {query} {scope} state="applications-loading" />
+    {:else if filePending || applicationPending}
+      {#if fileSearchSlow}<EmptyState
+          {query}
+          {scope}
+          state="searching"
+        />{:else}<div class="files-loading" aria-hidden="true"></div>{/if}
+    {:else if scope === 'files' && !isNative()}
+      <EmptyState {query} {scope} state="desktop" />
+    {:else}<EmptyState
+        {query}
+        {scope}
+        onsearchall={() => selectScope('all')}
+        onmanagefiles={isNative() ? manageFileSettings : undefined}
+      />{/if}
     <footer>
       <div class="footer-brand">
         <span class="brand-icon"><CommandIcon size={13} strokeWidth={2} /></span
         ><span>mycast</span>
       </div>
-      <div
-        class="footer-status"
-        role="status"
-        aria-live="polite"
-        class:error={isError && !!message}
-      >
-        {#if message}{#if isError}<CircleAlert size={12} />{:else}<Check
-              size={12}
-            />{/if}<span>{message}</span>
-        {:else}{#if !aiMode}<div class="hint">
-              <span class="arrow-pair"
-                >{shortcutLabel($preferences.shortcuts.previousItem)}
-                {shortcutLabel($preferences.shortcuts.nextItem)}</span
-              > Navigate
-            </div>{/if}
-          <div class="hint">
-            <KeyboardHint
-              keys={shortcutLabel($preferences.shortcuts.open).split('+')}
-            />
-            {aiMode
-              ? 'Ask AI'
-              : runMode
-                ? 'Run'
-                : calculation.kind === 'success'
-                  ? 'Copy'
-                  : 'Open'}
-          </div>
-          {#if platform === 'windows' && (selectedCommand?.canRunAsAdmin || (selectedCommand?.action.type === 'native' && selectedCommand.action.name === 'notepad'))}
-            <div class="hint">
-              <KeyboardHint
-                keys={shortcutLabel($preferences.shortcuts.openAdmin).split(
-                  '+',
-                )}
-              /> Admin
-            </div>
-          {/if}
-          <div class="hint">
-            <KeyboardHint
-              keys={shortcutLabel($preferences.shortcuts.close).split('+')}
-            /> Close
+      <FooterStatus {...footerNotice} />
+      <div class="footer-hints" aria-label="Keyboard hints">
+        {#if !aiMode}<div class="hint">
+            <span class="arrow-pair"
+              >{shortcutLabel($preferences.shortcuts.previousItem)}
+              {shortcutLabel($preferences.shortcuts.nextItem)}</span
+            > Navigate
           </div>{/if}
+        <div class="hint">
+          <KeyboardHint
+            keys={shortcutLabel($preferences.shortcuts.open).split('+')}
+          />
+          {aiMode
+            ? 'Ask AI'
+            : runMode
+              ? 'Run'
+              : calculation.kind === 'success'
+                ? 'Copy'
+                : 'Open'}
+        </div>
+        {#if platform === 'windows' && (selectedCommand?.canRunAsAdmin || (selectedCommand?.action.type === 'native' && selectedCommand.action.name === 'notepad'))}
+          <div class="hint">
+            <KeyboardHint
+              keys={shortcutLabel($preferences.shortcuts.openAdmin).split('+')}
+            /> Admin
+          </div>
+        {/if}
+        <div class="hint">
+          <KeyboardHint
+            keys={shortcutLabel($preferences.shortcuts.close).split('+')}
+          /> Close
+        </div>
       </div>
       <button
         class="preferences-button"
@@ -805,20 +931,6 @@
     opacity: 0;
     transform: translateY(-4px) scale(0.995);
   }
-  .discovery-error {
-    display: flex;
-    align-items: center;
-    gap: 7px;
-    padding: 6px 23px;
-    font-size: var(--text-10);
-    color: var(--danger);
-    flex-shrink: 0;
-  }
-  .discovery-error span {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
   footer {
     min-height: 43px;
     height: 43px;
@@ -831,6 +943,7 @@
     background: color-mix(in srgb, var(--bg) 60%, var(--surface));
   }
   .footer-brand {
+    flex-shrink: 0;
     display: flex;
     align-items: center;
     gap: 7px;
@@ -849,24 +962,14 @@
     background: var(--accent-soft);
     border: 1px solid color-mix(in srgb, var(--accent) 18%, transparent);
   }
-  .footer-status {
-    flex: 1;
-    min-width: 0;
+  .footer-hints {
+    flex-shrink: 0;
     display: flex;
     align-items: center;
     justify-content: flex-end;
     gap: 12px;
     color: var(--secondary);
     font-size: var(--text-10);
-  }
-  .footer-status > span {
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .footer-status.error {
-    color: var(--danger);
-    gap: 6px;
   }
   .hint {
     display: flex;

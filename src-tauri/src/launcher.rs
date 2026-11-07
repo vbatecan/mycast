@@ -4,7 +4,7 @@ use std::{
     fs,
     path::PathBuf,
     sync::{
-        Mutex,
+        Arc, Mutex,
         atomic::{AtomicBool, Ordering},
     },
 };
@@ -36,7 +36,7 @@ struct ShortcutRegistration {
 pub struct LauncherControls {
     registration: Mutex<ShortcutRegistration>,
     operation: tauri::async_runtime::Mutex<()>,
-    capture: AtomicBool,
+    capture: Arc<AtomicBool>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -261,6 +261,10 @@ pub fn set_shortcut_capture(
         })
     {
         return Err("Open and focus Mycast before recording a shortcut.".into());
+    }
+    #[cfg(windows)]
+    if active {
+        crate::shortcut_capture::initialize(&app, controls.capture.clone())?;
     }
     controls.capture.store(active, Ordering::SeqCst);
     Ok(())

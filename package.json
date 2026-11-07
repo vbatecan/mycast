@@ -1,6 +1,6 @@
 {
   "name": "mycast",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "private": true,
   "description": "A quiet, keyboard-first Windows command launcher",
   "type": "module",

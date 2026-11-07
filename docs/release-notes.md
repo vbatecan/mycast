@@ -1,5 +1,15 @@
 ## Downloads
 
+## v0.3.1
+
+- Record global launcher shortcuts with Alt and either Windows key without opening the Windows system menu or triggering the recorded combination. Key releases, cancellation, and modifiers held before recording are handled natively on Windows.
+- Fix the updater resource-close permission that caused `plugin:resources|close not allowed by ACL`. If an older installation still reports this error, install v0.3.1 from GitHub to apply the fix.
+- Keep matching file results visible while the next search runs. Delayed progress appears in a fixed footer area, preserving keyboard hints and preventing the result list from jumping while typing.
+- Add specific empty states for Files, Applications, Favorites, and Recents, with Search All and Manage folders actions where relevant.
+- Add plain-language search errors, Retry actions, and expandable technical details. Pending searches wait before showing a no-matches state, and empty states no longer slide into place.
+- Keep indexing counts in Settings only; the launcher shows a quiet preparation message.
+- Validation: frontend checks/build, 25 unit tests, 13 native tests, and 13 focused browser tests passed. Broader browser tests have known failures also reproduced on the original code. Physical-key desktop testing and a live updater installation remain unverified.
+
 ## v0.3.0
 
 - Web search: type `? search terms` to open your default browser. Preferences → Search offers Google, Bing, DuckDuckGo, and a custom URL template.

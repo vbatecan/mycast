@@ -90,6 +90,10 @@ pub async fn set_module(
         if id == "files" && !enabled {
             app.state::<crate::files::FileIndex>().stop();
         }
+        if id == "ai" && !enabled {
+            app.state::<crate::ai::AiState>().0.lock().unwrap().clear();
+            app.state::<crate::mcp::McpState>().stop();
+        }
         if id == "applications" && !enabled {
             tauri::async_runtime::block_on(
                 app.state::<crate::applications::ApplicationCatalog>()

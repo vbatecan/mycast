@@ -1,6 +1,6 @@
 <script lang="ts">
   import AiPanel from './AiPanel.svelte';
-  import { clearAi } from '../stores/ai';
+  import { aiResponse, stopAi } from '../stores/ai';
   import { webResult } from '../commands/web';
   import { loadWindowsCommands } from '../stores/applications';
   import { onMount, tick, untrack } from 'svelte';
@@ -68,10 +68,18 @@
   let selectedKey = $state('');
   let searchTimestamp = $state(Date.now());
   let view = $state<
-    'palette' | 'settings' | 'about' | 'appearance' | 'updates' | 'files'
+    | 'palette'
+    | 'settings'
+    | 'about'
+    | 'appearance'
+    | 'updates'
+    | 'files'
+    | 'ai'
+    | 'mcp'
   >('palette');
   let scope = $state<CommandScope>('all');
-  let input = $state<HTMLInputElement>();
+  let input = $state<HTMLInputElement | HTMLTextAreaElement>();
+  let paletteHeight = $state(480);
   let busy = $state(false);
   let message = $state('');
   let isError = $state(false);
@@ -100,7 +108,7 @@
   let aiPanel = $state<{ submit: () => void }>();
   let aiMode = $derived($modules.ai && query.trimStart().startsWith('??'));
   $effect(() => {
-    if (!shown || view !== 'palette' || !aiMode) void clearAi();
+    if (!shown || view !== 'palette' || !aiMode) void stopAi();
   });
   let webMode = $derived(
     !aiMode &&
@@ -580,6 +588,17 @@
     const action = (
       Object.keys($preferences.shortcuts) as ShortcutAction[]
     ).find((id) => $preferences.shortcuts[id] === binding);
+    if (view === 'palette' && aiMode) {
+      if (action === 'close' || event.key === 'Escape') {
+        event.preventDefault();
+        query = '';
+        void focusSearch();
+      } else if (action === 'open' && !event.repeat && !event.shiftKey) {
+        event.preventDefault();
+        aiPanel?.submit();
+      }
+      return;
+    }
     if (
       view === 'palette' &&
       action &&
@@ -730,6 +749,9 @@
 <section
   class="palette"
   class:closing={!shown}
+  class:ai-mode={aiMode && view === 'palette'}
+  bind:clientHeight={paletteHeight}
+  style:--composer-offset={Math.max(0, paletteHeight - 94) + 'px'}
   aria-label="Mycast command launcher"
   aria-busy={busy}
 >
@@ -747,18 +769,28 @@
       }}
     />
   {:else}
-    <SearchInput
-      bind:value={query}
-      bind:input
-      activeId={results[selectedIndex]
-        ? 'command-' + results[selectedIndex].id
-        : undefined}
-      onkeydown={handleKeys}
-    />
-    <CatalogueBar {scope} onselect={selectScope} />
-    {#if webMode}<div class="file-search-status" role="status">
-        Type ? followed by search terms · Enter opens your default browser
-      </div>{/if}
+    <div class="search-slot" class:ai-composer={aiMode}>
+      <SearchInput
+        bind:value={query}
+        bind:input
+        mode={aiMode ? 'ai' : webMode ? 'web' : runMode ? 'run' : 'search'}
+        running={$aiResponse.running}
+        retry={!!$aiResponse.error &&
+          query.trimStart().slice(2).trim() === $aiResponse.prompt.trim()}
+        aiAvailable={$modulesReady && $modules.ai}
+        onsubmit={() => aiPanel?.submit()}
+        onstop={() => void stopAi()}
+        activeId={results[selectedIndex]
+          ? 'command-' + results[selectedIndex].id
+          : undefined}
+        onkeydown={handleKeys}
+      />
+    </div>
+    {#if !aiMode}<div class="search-spacer" aria-hidden="true"></div>{/if}
+    {#if !aiMode && !webMode}<CatalogueBar
+        {scope}
+        onselect={selectScope}
+      />{/if}
     {#if runMode}<div class="file-search-status">
         Run in a visible PowerShell terminal · {shortcutLabel(
           $preferences.shortcuts.open,
@@ -768,7 +800,19 @@
     {#if aiMode}<AiPanel
         bind:this={aiPanel}
         prompt={query.trimStart().slice(2)}
+        onsettings={() => (view = 'ai')}
+        onmcp={() => (view = 'mcp')}
+        onexit={() => {
+          query = '';
+          void focusSearch();
+        }}
+        onnew={() => {
+          query = '??';
+          void focusSearch();
+        }}
       />
+    {:else if webMode && !query.trimStart().slice(1).trim()}
+      <div class="mode-empty"><h2>Search the web</h2></div>
     {:else if calculation.kind === 'error' && !results.length}
       <div class="calculation-error" role="status">
         <CircleAlert size={16} />
@@ -843,56 +887,60 @@
         onsearchall={() => selectScope('all')}
         onmanagefiles={isNative() ? manageFileSettings : undefined}
       />{/if}
-    <footer>
-      <div class="footer-brand">
-        <span class="brand-icon"><CommandIcon size={13} strokeWidth={2} /></span
-        ><span>mycast</span>
-      </div>
-      <FooterStatus {...footerNotice} />
-      <div class="footer-hints" aria-label="Keyboard hints">
-        {#if !aiMode}<div class="hint">
-            <span class="arrow-pair"
-              >{shortcutLabel($preferences.shortcuts.previousItem)}
-              {shortcutLabel($preferences.shortcuts.nextItem)}</span
-            > Navigate
-          </div>{/if}
-        <div class="hint">
-          <KeyboardHint
-            keys={shortcutLabel($preferences.shortcuts.open).split('+')}
-          />
-          {aiMode
-            ? 'Ask AI'
-            : runMode
-              ? 'Run'
-              : calculation.kind === 'success'
-                ? 'Copy'
-                : 'Open'}
+    {#if !aiMode}<footer>
+        <div class="footer-brand">
+          <span class="brand-icon"
+            ><CommandIcon size={13} strokeWidth={2} /></span
+          ><span>mycast</span>
         </div>
-        {#if platform === 'windows' && (selectedCommand?.canRunAsAdmin || (selectedCommand?.action.type === 'native' && selectedCommand.action.name === 'notepad'))}
+        <FooterStatus {...footerNotice} />
+        <div class="footer-hints" aria-label="Keyboard hints">
+          {#if !aiMode && !webMode}<div class="hint">
+              <span class="arrow-pair"
+                >{shortcutLabel($preferences.shortcuts.previousItem)}
+                {shortcutLabel($preferences.shortcuts.nextItem)}</span
+              > Navigate
+            </div>{/if}
+          {#if !aiMode || !$aiResponse.running}<div class="hint">
+              <KeyboardHint
+                keys={shortcutLabel($preferences.shortcuts.open).split('+')}
+              />
+              {aiMode
+                ? 'Ask AI'
+                : runMode
+                  ? 'Run'
+                  : calculation.kind === 'success'
+                    ? 'Copy'
+                    : 'Open'}
+            </div>{/if}
+          {#if platform === 'windows' && (selectedCommand?.canRunAsAdmin || (selectedCommand?.action.type === 'native' && selectedCommand.action.name === 'notepad'))}
+            <div class="hint">
+              <KeyboardHint
+                keys={shortcutLabel($preferences.shortcuts.openAdmin).split(
+                  '+',
+                )}
+              /> Admin
+            </div>
+          {/if}
           <div class="hint">
             <KeyboardHint
-              keys={shortcutLabel($preferences.shortcuts.openAdmin).split('+')}
-            /> Admin
+              keys={shortcutLabel($preferences.shortcuts.close).split('+')}
+            /> Close
           </div>
-        {/if}
-        <div class="hint">
-          <KeyboardHint
-            keys={shortcutLabel($preferences.shortcuts.close).split('+')}
-          /> Close
         </div>
-      </div>
-      <button
-        class="preferences-button"
-        class:update-available={$updateState.status === 'available'}
-        title={$updateState.status === 'available'
-          ? `Update ${$updateState.version} available — open Updates`
-          : 'Open Mycast settings'}
-        aria-label="Open Mycast settings"
-        onclick={() =>
-          (view = $updateState.status === 'available' ? 'updates' : 'settings')}
-        ><SlidersHorizontal size={14} /></button
-      >
-    </footer>
+        <button
+          class="preferences-button"
+          class:update-available={$updateState.status === 'available'}
+          title={$updateState.status === 'available'
+            ? `Update ${$updateState.version} available — open Updates`
+            : 'Open Mycast settings'}
+          aria-label="Open Mycast settings"
+          onclick={() =>
+            (view =
+              $updateState.status === 'available' ? 'updates' : 'settings')}
+          ><SlidersHorizontal size={14} /></button
+        >
+      </footer>{/if}
   {/if}
 </section>
 
@@ -914,6 +962,39 @@
       opacity calc(110ms * var(--motion-scale, 1)),
       transform calc(110ms * var(--motion-scale, 1));
   }
+
+  .search-slot {
+    position: absolute;
+    z-index: 4;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 73px;
+    transform: translateY(0);
+    transition:
+      transform calc(340ms * var(--motion-scale, 1))
+        cubic-bezier(0.22, 1, 0.36, 1),
+      left calc(340ms * var(--motion-scale, 1)),
+      right calc(340ms * var(--motion-scale, 1));
+  }
+  .search-slot.ai-composer {
+    left: 16px;
+    right: 16px;
+    height: 78px;
+    transform: translateY(var(--composer-offset));
+  }
+  .search-spacer {
+    height: 73px;
+    flex-shrink: 0;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .search-slot {
+      transition: none;
+    }
+  }
+  :global(.motion-off) .search-slot {
+    transition: none;
+  }
   .file-search-status {
     padding: 4px 23px;
     font-size: var(--text-10);
@@ -926,6 +1007,16 @@
     place-items: center;
     color: var(--secondary);
     font-size: var(--text-13);
+  }
+  .mode-empty {
+    flex: 1;
+    display: grid;
+    place-items: center;
+    color: var(--muted);
+  }
+  .mode-empty h2 {
+    font-size: var(--text-16);
+    font-weight: 400;
   }
   .palette.closing {
     opacity: 0;

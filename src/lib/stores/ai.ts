@@ -1,6 +1,8 @@
 import { get, writable } from 'svelte/store';
 import { Channel, invoke } from '@tauri-apps/api/core';
 import { isNative } from '../native';
+import { conversationHistory } from '../ai/conversation';
+import { pendingToolApproval, type ToolApproval } from './mcp';
 export const providers = {
   openai: 'OpenAI',
   claude: 'Claude',
@@ -22,10 +24,15 @@ try {
   if (value && value in providers) initial = value as Provider;
 } catch {}
 export const aiProvider = writable<Provider>(initial);
+let lastProvider = initial;
 aiProvider.subscribe((value) => {
   try {
     localStorage.setItem('mycast.ai.provider', value);
   } catch {}
+  if (lastProvider !== value) {
+    lastProvider = value;
+    void clearAi();
+  }
 });
 const desktop = () => {
   if (!isNative())
@@ -66,10 +73,12 @@ const empty = (): AiResponse => ({
   prompt: '',
 });
 export const aiResponse = writable<AiResponse>(empty());
+export const aiPastTurns = writable<AiResponse[]>([]);
 let active = '';
 let pending: Promise<void> | undefined;
 let stopping: Promise<void> | undefined;
 export function stopAi(): Promise<void> {
+  pendingToolApproval.set(null);
   if (stopping) return stopping;
   const id = active;
   if (!id) return Promise.resolve();
@@ -83,8 +92,13 @@ export function stopAi(): Promise<void> {
   });
   return stopping;
 }
-export async function askAi(prompt: string) {
+export async function askAi(prompt: string, retry = false) {
   if (!prompt.trim() || get(aiResponse).running || stopping) return;
+  const previous = get(aiResponse);
+  if (!retry && previous.prompt) {
+    aiPastTurns.update((turns) => [...turns, { ...previous }].slice(-24));
+  }
+  const history = conversationHistory(get(aiPastTurns));
   let requestId = '';
   aiResponse.set({ ...empty(), prompt, running: true, status: 'Connecting…' });
   try {
@@ -92,12 +106,16 @@ export async function askAi(prompt: string) {
     const id = crypto.randomUUID();
     active = id;
     requestId = id;
-    const output = new Channel<{
-      type: 'text' | 'thinking' | 'status';
-      text: string;
-    }>();
+    const output = new Channel<
+      | { type: 'text' | 'thinking' | 'status'; text: string }
+      | { type: 'tool-approval'; text: ToolApproval }
+    >();
     output.onmessage = (event) => {
       if (active !== id) return;
+      if (event.type === 'tool-approval') {
+        pendingToolApproval.set(event.text);
+        return;
+      }
       aiResponse.update((s) =>
         event.type === 'status'
           ? { ...s, status: event.text }
@@ -110,6 +128,7 @@ export async function askAi(prompt: string) {
       id,
       provider: get(aiProvider),
       prompt,
+      history,
       output,
     });
     await pending;
@@ -132,9 +151,12 @@ export async function askAi(prompt: string) {
       error: String(error),
       status: 'Request failed',
     }));
+  } finally {
+    pendingToolApproval.set(null);
   }
 }
 export async function clearAi() {
   await stopAi();
+  aiPastTurns.set([]);
   aiResponse.set(empty());
 }

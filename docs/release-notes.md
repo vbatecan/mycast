@@ -1,5 +1,14 @@
 ## Downloads
 
+## v0.4.0
+
+- Redesign AI as a conversation with a bottom multiline composer, a compact toolbar, and visible earlier exchanges. Enter sends; Shift + Enter adds a line.
+- Fix follow-up context across OpenAI-compatible, Claude, and Gemini providers. Completed exchanges stay in memory when leaving AI or hiding Mycast. New conversation, changing providers, or quitting clears them. Context includes up to 16 recent exchanges within 256 KB; failed and stopped responses are excluded.
+- Replace generic AI and Search settings controls with themed provider pickers and connection fields, clearer setup states, and focused actions.
+- Add local stdio MCP servers under Preferences → MCP, with explicit connection/disconnection, tool discovery, and Allow once / Deny for every model-requested tool call. Your model must support tool calling. Connected tool definitions and results go to the selected AI provider. See [MCP setup](https://github.com/vbatecan/mycast/blob/main/docs/mcp.md).
+- Disabling AI cancels requests and MCP connections. Remote HTTP, OAuth, MCP resources, prompts, and sampling are not included.
+- Validation: frontend checks/build, Rust compilation, 28 frontend unit tests, and 13 focused browser tests passed. The native Windows test executable stalls before entering its harness; native MCP fixture execution and live paid-provider integration remain unverified.
+
 ## v0.3.1
 
 - Record global launcher shortcuts with Alt and either Windows key without opening the Windows system menu or triggering the recorded combination. Key releases, cancellation, and modifiers held before recording are handled natively on Windows.

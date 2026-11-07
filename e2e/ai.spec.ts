@@ -1,15 +1,20 @@
 import { test, expect } from '@playwright/test';
+import { chooseProvider } from './helpers/pickers';
 test('AI prefix has an empty state and never opens web search', async ({
   page,
 }) => {
   await page.goto('http://127.0.0.1:1422');
   await page.getByRole('combobox').fill('??');
   await expect(
-    page.getByRole('heading', { name: 'What’s on your mind?' }),
+    page.getByRole('heading', { name: 'Ask anything' }),
   ).toBeVisible();
   await expect(page.getByRole('option')).toHaveCount(0);
-  await page.getByRole('combobox').fill('?? explain streaming');
-  await page.getByRole('combobox').press('Enter');
+  await page
+    .getByRole('textbox', { name: 'Ask AI', exact: true })
+    .fill('explain streaming');
+  await page
+    .getByRole('textbox', { name: 'Ask AI', exact: true })
+    .press('Enter');
   await expect(page.getByRole('alert')).toContainText('desktop app');
 });
 test('animation speed persists and reduced motion wins', async ({ page }) => {
@@ -69,18 +74,21 @@ test('AI streams Markdown safely and stops on request', async ({ page }) => {
       },
     });
   });
-  await page.getByRole('combobox').press('Enter');
+  await page
+    .getByRole('textbox', { name: 'Ask AI', exact: true })
+    .press('Enter');
   await expect(
     page.getByRole('heading', { name: 'Hello', exact: true }),
   ).toBeVisible();
-  await expect(
-    page.getByText('Thinking preview · supplied by model'),
-  ).toBeVisible();
+  await expect(page.getByText('Thinking', { exact: true })).toBeVisible();
   await expect(page.locator('.markdown strong')).toHaveText('Streaming');
   await page.screenshot({ path: 'artifacts/ai-answer.png' });
   await expect(page.locator('.markdown img, .markdown script')).toHaveCount(0);
   await page.getByRole('button', { name: 'Stop generating' }).click();
   await expect(page.locator('.ai-status')).toContainText('Stopped');
+  await page
+    .getByRole('button', { name: 'Back to search', exact: true })
+    .click();
   await page.getByRole('combobox').fill('? web');
   await expect(page.getByRole('region', { name: 'AI answer' })).toHaveCount(0);
 });
@@ -110,7 +118,6 @@ test('BYOK settings switch providers and keep keys out of browser storage', asyn
     });
   });
   await page.getByRole('tab', { name: 'AI', exact: true }).click();
-  const select = page.getByLabel('Provider', { exact: true });
   for (const provider of [
     'openai',
     'claude',
@@ -119,13 +126,14 @@ test('BYOK settings switch providers and keep keys out of browser storage', asyn
     'ollama',
     'lmstudio',
   ]) {
-    await select.selectOption(provider);
-    await expect(page.getByLabel('Model ID')).toBeVisible();
+    await chooseProvider(page, provider);
+    await expect(page.getByLabel('Model', { exact: true })).toBeVisible();
   }
-  await page.getByLabel('Model ID').fill('test-model');
+  await chooseProvider(page, 'custom');
+  await page.getByLabel('Model', { exact: true }).fill('test-model');
   await page.getByLabel(/API key/).fill('synthetic-test-key');
-  await page.getByRole('button', { name: 'Save AI settings' }).click();
-  await expect(page.getByText('AI settings saved.')).toBeVisible();
+  await page.getByRole('button', { name: 'Save changes' }).click();
+  await expect(page.getByRole('status')).toHaveText('Saved');
   await expect(page.getByLabel(/API key/)).toHaveValue('');
   const storage = await page.evaluate(() =>
     JSON.stringify({ ...localStorage }),

@@ -153,6 +153,7 @@ pub enum AiEvent {
     Text(String),
     Thinking(String),
     Status(String),
+    ToolApproval(crate::mcp::ToolApproval),
 }
 
 // Only provider-supplied public stream fields are displayed; never fabricate reasoning.
@@ -200,7 +201,15 @@ fn deltas(value: &Value) -> Result<Vec<AiEvent>, String> {
     }
     Ok(result)
 }
+#[cfg(test)]
 fn frame(bytes: &[u8], output: &Channel<AiEvent>) -> Result<bool, String> {
+    frame_collect(bytes, output, None)
+}
+fn frame_collect(
+    bytes: &[u8],
+    output: &Channel<AiEvent>,
+    mut round: Option<&mut crate::ai_tools::Round>,
+) -> Result<bool, String> {
     let text = std::str::from_utf8(bytes).map_err(|_| "Invalid UTF-8 in AI stream")?;
     let data = text
         .lines()
@@ -215,14 +224,80 @@ fn frame(bytes: &[u8], output: &Channel<AiEvent>) -> Result<bool, String> {
     }
     let value: Value = serde_json::from_str(&data)
         .map_err(|_| "Invalid response from AI endpoint. Expected an SSE JSON stream.")?;
+    if let Some(round) = round.as_deref_mut() {
+        round.collect(&value);
+    }
     for event in deltas(&value)? {
+        if let AiEvent::Text(text) = &event {
+            if let Some(round) = round.as_deref_mut() {
+                round.text.push_str(text);
+            }
+        }
         output.send(event).map_err(|_| "AI view closed")?;
     }
     Ok(value["type"] == "message_stop"
         || value["choices"][0]["finish_reason"].is_string()
         || value["candidates"][0]["finishReason"].is_string())
 }
-async fn stream(config: AiConfig, prompt: String, output: Channel<AiEvent>) -> Result<(), String> {
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ConversationMessage {
+    role: String,
+    content: String,
+}
+
+fn conversation_messages(
+    prompt: String,
+    history: Vec<ConversationMessage>,
+) -> Result<Vec<ConversationMessage>, String> {
+    if prompt.trim().is_empty() || prompt.len() > 32_000 {
+        return Err("Enter a prompt up to 32,000 bytes.".into());
+    }
+    if history.len() > 32
+        || history.len() % 2 != 0
+        || history
+            .iter()
+            .map(|message| message.content.len())
+            .sum::<usize>()
+            > 256_000
+    {
+        return Err("Conversation context is too large. Start a new conversation.".into());
+    }
+    for (index, message) in history.iter().enumerate() {
+        if message.role != if index % 2 == 0 { "user" } else { "assistant" }
+            || message.content.trim().is_empty()
+        {
+            return Err("Invalid conversation history.".into());
+        }
+    }
+    let mut messages = history;
+    messages.push(ConversationMessage {
+        role: "user".into(),
+        content: prompt,
+    });
+    Ok(messages)
+}
+
+fn conversation_body(config: &AiConfig, messages: &[ConversationMessage]) -> Value {
+    if config.provider == "gemini" {
+        return json!({ "contents": messages.iter().map(|message| json!({
+            "role": if message.role == "assistant" { "model" } else { "user" },
+            "parts": [{"text": message.content}],
+        })).collect::<Vec<_>>() });
+    }
+    let mut body = json!({ "model": config.model, "messages": messages, "stream": true });
+    if config.provider == "claude" {
+        body["max_tokens"] = json!(4096);
+    }
+    body
+}
+
+async fn stream(
+    config: AiConfig,
+    messages: Vec<ConversationMessage>,
+    output: Channel<AiEvent>,
+    app: Option<AppHandle>,
+) -> Result<(), String> {
     validate(&config)?;
     let key = read_key(&config)?;
     if matches!(config.provider.as_str(), "openai" | "claude" | "gemini") && key.is_empty() {
@@ -236,10 +311,11 @@ async fn stream(config: AiConfig, prompt: String, output: Channel<AiEvent>) -> R
     let root = config.base_url.trim_end_matches('/');
     let mut url =
         tauri::Url::parse(&format!("{root}/chat/completions")).map_err(|_| "Invalid endpoint")?;
-    let mut body = json!({ "model": config.model, "messages": [{"role":"user", "content":prompt}], "stream":true });
+    let mut body = conversation_body(&config, &messages);
+    let tools = app.as_ref().map(crate::mcp::tools).unwrap_or_default();
+    crate::ai_tools::definitions(&mut body, &config.provider, &tools);
     if config.provider == "claude" {
         url = tauri::Url::parse(&format!("{root}/messages")).map_err(|_| "Invalid endpoint")?;
-        body["max_tokens"] = json!(4096);
     }
     if config.provider == "gemini" {
         url = tauri::Url::parse(&format!("{root}/models/")).map_err(|_| "Invalid endpoint")?;
@@ -248,73 +324,111 @@ async fn stream(config: AiConfig, prompt: String, output: Channel<AiEvent>) -> R
             .pop_if_empty()
             .push(&format!("{}:streamGenerateContent", config.model));
         url.set_query(Some("alt=sse"));
-        body = json!({"contents":[{"parts":[{"text":prompt}]}]});
     }
-    let mut request = client.post(url).json(&body);
-    if !key.is_empty() {
-        request = match config.provider.as_str() {
-            "claude" => request
-                .header("x-api-key", key)
-                .header("anthropic-version", "2023-06-01"),
-            "gemini" => request.header("x-goog-api-key", key),
-            _ => request.bearer_auth(key),
-        };
-    }
-    output
-        .send(AiEvent::Status("Connecting…".into()))
-        .map_err(|_| "AI view closed")?;
-    let mut response = request
-        .send()
-        .await
-        .map_err(|_| "Could not connect to AI provider. Check the endpoint and network.")?;
-    if !response.status().is_success() {
-        return Err(format!(
-            "AI provider returned HTTP {}. Check your key, model, quota, and endpoint.",
-            response.status().as_u16()
-        ));
-    }
-    output
-        .send(AiEvent::Status("Waiting for the model…".into()))
-        .map_err(|_| "AI view closed")?;
-    let mut buffer = vec![];
-    let mut total = 0;
-    while let Some(chunk) = response
-        .chunk()
-        .await
-        .map_err(|_| "AI stream was interrupted. You can retry.")?
-    {
-        total += chunk.len();
-        if total > 2_000_000 {
-            return Err("AI response exceeded the 2 MB limit.".into());
-        }
-        buffer.extend_from_slice(&chunk);
-        // Handle both LF and CRLF SSE separators, even across network chunks.
-        loop {
-            let boundary = buffer
-                .windows(2)
-                .position(|v| v == b"\n\n")
-                .map(|p| (p, 2))
-                .into_iter()
-                .chain({
-                    buffer
-                        .windows(4)
-                        .position(|v| v == b"\r\n\r\n")
-                        .map(|p| (p, 4))
-                })
-                .min_by_key(|(position, _)| *position);
-            let Some((end, size)) = boundary else {
-                break;
+    for round_index in 0..8 {
+        let mut round = crate::ai_tools::Round::default();
+        let mut request = client.post(url.clone()).json(&body);
+        if !key.is_empty() {
+            request = match config.provider.as_str() {
+                "claude" => request
+                    .header("x-api-key", &key)
+                    .header("anthropic-version", "2023-06-01"),
+                "gemini" => request.header("x-goog-api-key", &key),
+                _ => request.bearer_auth(&key),
             };
-            if frame(&buffer[..end], &output)? {
-                return Ok(());
+        }
+        output
+            .send(AiEvent::Status("Connecting…".into()))
+            .map_err(|_| "AI view closed")?;
+        let mut response = request
+            .send()
+            .await
+            .map_err(|_| "Could not connect to AI provider. Check the endpoint and network.")?;
+        if !response.status().is_success() {
+            return Err(format!(
+                "AI provider returned HTTP {}. Check your key, model, quota, and endpoint.",
+                response.status().as_u16()
+            ));
+        }
+        output
+            .send(AiEvent::Status("Waiting for the model…".into()))
+            .map_err(|_| "AI view closed")?;
+        let mut buffer = vec![];
+        let mut total = 0;
+        'response: while let Some(chunk) = response
+            .chunk()
+            .await
+            .map_err(|_| "AI stream was interrupted. You can retry.")?
+        {
+            total += chunk.len();
+            if total > 2_000_000 {
+                return Err("AI response exceeded the 2 MB limit.".into());
             }
-            buffer.drain(..end + size);
+            buffer.extend_from_slice(&chunk);
+            // Handle both LF and CRLF SSE separators, even across network chunks.
+            loop {
+                let boundary = buffer
+                    .windows(2)
+                    .position(|v| v == b"\n\n")
+                    .map(|p| (p, 2))
+                    .into_iter()
+                    .chain({
+                        buffer
+                            .windows(4)
+                            .position(|v| v == b"\r\n\r\n")
+                            .map(|p| (p, 4))
+                    })
+                    .min_by_key(|(position, _)| *position);
+                let Some((end, size)) = boundary else {
+                    break;
+                };
+                if frame_collect(&buffer[..end], &output, Some(&mut round))? {
+                    buffer.clear();
+                    break 'response;
+                }
+                buffer.drain(..end + size);
+            }
+        }
+        if !buffer.is_empty() {
+            frame_collect(&buffer, &output, Some(&mut round))?;
+        }
+
+        if round.calls.is_empty() {
+            return Ok(());
+        }
+        let app = app
+            .as_ref()
+            .ok_or("MCP tools are not available in this request.")?;
+        let mut results = vec![];
+        for (index, call) in &round.calls {
+            let mut call = call.clone();
+            if call.id.is_empty() && config.provider != "gemini" {
+                call.id = format!("mcp_call_{round_index}_{index}");
+            }
+            let result = if let Some(tool) = tools.iter().find(|tool| tool.alias == call.name) {
+                match serde_json::from_str::<Value>(if call.arguments.is_empty() {
+                    "{}"
+                } else {
+                    &call.arguments
+                }) {
+                    Ok(arguments) => crate::mcp::call(app, tool, arguments, &output)
+                        .await
+                        .unwrap_or_else(|error| json!({"error":error})),
+                    Err(_) => json!({"error":"Invalid tool arguments. Send a JSON object."}),
+                }
+            } else {
+                json!({"error":"This tool is not connected or available."})
+            };
+            results.push((call, result));
+        }
+        crate::ai_tools::append_results(&mut body, &config.provider, &round, &results)?;
+        if !round.text.is_empty() {
+            output
+                .send(AiEvent::Text("\n\n".into()))
+                .map_err(|_| "AI view closed")?;
         }
     }
-    if !buffer.is_empty() {
-        frame(&buffer, &output)?;
-    }
-    Ok(())
+    Err("The AI reached the tool-call limit. Ask a more focused question.".into())
 }
 #[tauri::command]
 pub fn cancel_ai(state: State<'_, AiState>, id: String) {
@@ -329,13 +443,12 @@ pub async fn ask_ai(
     id: String,
     provider: String,
     prompt: String,
+    history: Option<Vec<ConversationMessage>>,
     output: Channel<AiEvent>,
 ) -> Result<(), String> {
     crate::modules::require("ai")?;
-    if prompt.trim().is_empty() || prompt.len() > 32_000 {
-        return Err("Enter a prompt up to 32,000 bytes.".into());
-    }
-    let config = get_ai_config(app, provider)?;
+    let messages = conversation_messages(prompt, history.unwrap_or_default())?;
+    let config = get_ai_config(app.clone(), provider)?;
     let (tx, rx) = tokio::sync::oneshot::channel();
     {
         let mut active = state.0.lock().unwrap();
@@ -346,7 +459,7 @@ pub async fn ask_ai(
     }
     let result = tokio::select! {
         _ = rx => Ok(()),
-        result = tokio::time::timeout(Duration::from_secs(180), stream(config, prompt, output)) => result.unwrap_or_else(|_| Err("AI request timed out. Try again or choose a faster model.".into())),
+        result = tokio::time::timeout(Duration::from_secs(180), stream(config, messages, output, Some(app))) => result.unwrap_or_else(|_| Err("AI request timed out. Try again or choose a faster model.".into())),
     };
     state.0.lock().unwrap().remove(&id);
     result
@@ -355,6 +468,67 @@ pub async fn ask_ai(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn conversation_history_is_mapped_for_each_provider() {
+        let messages = conversation_messages(
+            "What name did I give you?".into(),
+            vec![
+                ConversationMessage {
+                    role: "user".into(),
+                    content: "My name is Nytri".into(),
+                },
+                ConversationMessage {
+                    role: "assistant".into(),
+                    content: "Hello Nytri".into(),
+                },
+            ],
+        )
+        .unwrap();
+        for provider in ["openai", "custom", "ollama", "lmstudio", "claude", "gemini"] {
+            let config = AiConfig {
+                provider: provider.into(),
+                model: "fixture".into(),
+                base_url: base(provider).into(),
+                has_key: false,
+            };
+            let body = conversation_body(&config, &messages);
+            if provider == "gemini" {
+                assert_eq!(body["contents"].as_array().unwrap().len(), 3);
+                assert_eq!(body["contents"][1]["role"], "model");
+                assert_eq!(body["contents"][0]["parts"][0]["text"], "My name is Nytri");
+            } else {
+                assert_eq!(body["messages"].as_array().unwrap().len(), 3);
+                assert_eq!(body["messages"][1]["role"], "assistant");
+                assert_eq!(body["messages"][0]["content"], "My name is Nytri");
+            }
+        }
+        assert!(
+            conversation_messages(
+                "hi".into(),
+                vec![ConversationMessage {
+                    role: "system".into(),
+                    content: "bad".into()
+                }]
+            )
+            .is_err()
+        );
+        assert!(
+            conversation_messages(
+                "hi".into(),
+                vec![
+                    ConversationMessage {
+                        role: "assistant".into(),
+                        content: "bad".into()
+                    },
+                    ConversationMessage {
+                        role: "user".into(),
+                        content: "bad".into()
+                    }
+                ]
+            )
+            .is_err()
+        );
+    }
     #[test]
     fn provider_deltas() {
         assert!(
@@ -440,6 +614,10 @@ mod tests {
             let text = String::from_utf8(request).unwrap();
             assert!(text.starts_with("POST /v1/chat/completions "));
             assert!(text.contains("\"stream\":true"));
+            let sent: Value = serde_json::from_str(text.split_once("\r\n\r\n").unwrap().1).unwrap();
+            assert_eq!(sent["messages"].as_array().unwrap().len(), 3);
+            assert_eq!(sent["messages"][0]["content"], "Remember orchid");
+            assert_eq!(sent["messages"][1]["content"], "Orchid noted");
             let body =
                 "data: {\"choices\":[{\"delta\":{\"content\":\"你好\"}}]}\r\n\r\ndata: [DONE]\n\n";
             write!(socket,"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",body.len()).unwrap();
@@ -462,7 +640,27 @@ mod tests {
             base_url: format!("http://{address}/v1"),
             has_key: false,
         };
-        stream(config, "hello".into(), output).await.unwrap();
+        stream(
+            config,
+            conversation_messages(
+                "Which plant?".into(),
+                vec![
+                    ConversationMessage {
+                        role: "user".into(),
+                        content: "Remember orchid".into(),
+                    },
+                    ConversationMessage {
+                        role: "assistant".into(),
+                        content: "Orchid noted".into(),
+                    },
+                ],
+            )
+            .unwrap(),
+            output,
+            None,
+        )
+        .await
+        .unwrap();
         server.join().unwrap();
         assert!(
             values

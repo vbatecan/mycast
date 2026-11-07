@@ -1,6 +1,6 @@
 [package]
 name = "mycast"
-version = "0.3.1"
+version = "0.4.0"
 description = "A small, keyboard-first Windows command launcher"
 authors = ["Mycast contributors"]
 edition = "2024"
@@ -16,6 +16,7 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 reqwest = { version = "0.13", default-features = false, features = ["json", "stream", "rustls"] }
 tokio = { version = "1", features = ["macros", "sync", "time"] }
+rmcp = { version = "3.9.0", default-features = false, features = ["client", "transport-child-process"] }
 tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-clipboard-manager = "2"

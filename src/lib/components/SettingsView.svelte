@@ -1,5 +1,6 @@
 <script lang="ts">
   import AiSettings from './AiSettings.svelte';
+  import McpSettings from './McpSettings.svelte';
   import SearchSettings from './SearchSettings.svelte';
   import ModuleSettings from './ModuleSettings.svelte';
   import UpdateSettings from './UpdateSettings.svelte';
@@ -39,7 +40,8 @@
       mode?: import('../native').LaunchMode,
     ) => Promise<void>;
     onback: () => void;
-    initialSection?: 'settings' | 'about' | 'appearance' | 'updates' | 'files';
+    initialSection?:
+      'settings' | 'about' | 'appearance' | 'updates' | 'files' | 'ai' | 'mcp';
     shortcut: string | null;
     shortcutError: string | null;
     version: string;
@@ -56,6 +58,7 @@
     | 'Modules'
     | 'Updates'
     | 'AI'
+    | 'MCP'
     | 'About';
   const tabId = (tab: Tab) => tab.toLowerCase().replace(/[^a-z0-9]+/g, '-');
   const tabs: Tab[] = [
@@ -68,6 +71,7 @@
     'Modules',
     'Updates',
     'AI',
+    'MCP',
     'About',
   ];
   let active: Tab = $state(
@@ -80,7 +84,11 @@
             ? 'Appearance'
             : initialSection === 'files'
               ? 'Files & Run'
-              : 'General',
+              : initialSection === 'ai'
+                ? 'AI'
+                : initialSection === 'mcp'
+                  ? 'MCP'
+                  : 'General',
     ),
   );
   let backButton: HTMLButtonElement;
@@ -196,6 +204,9 @@
   <div
     class="settings-content"
     class:commands-panel={active === 'Commands'}
+    class:connection-panel={active === 'AI' ||
+      active === 'Search' ||
+      active === 'MCP'}
     role="tabpanel"
     id={`panel-${tabId(active)}`}
     aria-labelledby={`tab-${tabId(active)}`}
@@ -279,7 +290,9 @@
         />
       </div>
     {:else if active === 'AI'}
-      <AiSettings />
+      <AiSettings onmcp={() => selectTab('MCP')} />
+    {:else if active === 'MCP'}
+      <McpSettings />
     {:else if active === 'Search'}
       <SearchSettings />
     {:else if active === 'Modules'}
@@ -549,6 +562,11 @@
     outline: none;
   }
   .settings-content.commands-panel {
+    display: flex;
+    overflow: hidden;
+    padding-bottom: 0;
+  }
+  .settings-content.connection-panel {
     display: flex;
     overflow: hidden;
     padding-bottom: 0;

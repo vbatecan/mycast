@@ -1,5 +1,19 @@
 # Verification recorded during implementation
 
+## Conversation context and local MCP — 2026-11-08
+
+AI now retains a session transcript when leaving AI or hiding the launcher. Follow-ups send completed user/assistant exchanges to OpenAI-compatible, Claude, and Gemini endpoints. Failed and stopped answers are excluded. New conversation and changing providers clear the transcript. Context is bounded to 16 recent exchanges / 256 KB.
+
+Added local stdio MCP configuration, explicit connection/disconnection, tool discovery, streaming tool-call adapters, and per-call approval in the conversation. Disabling AI cancels requests and connections. Remote HTTP, OAuth, resources, prompts, and sampling are outside this implementation.
+
+Checks passed:
+
+- Svelte/TypeScript: zero errors and warnings; production frontend build; Rust cargo check and formatting.
+- 28 frontend unit tests, including ordered conversation pairs, excluded failed/stopped turns, and byte/message bounds.
+- 13 focused browser tests covering the redesigned AI/Search controls, Markdown sanitization, conversation continuity across mode changes, provider isolation, reset, and mocked MCP configuration/approval/denial/disconnection.
+
+Native Rust tests compile, but the test executable stalls before entering the harness on this Windows session, including with `--list`. These runs were stopped; native fixture tests are **not recorded as passed**. Tests added for provider history payloads, fragmented streaming tool arguments, provider tool-result shapes, Gemini signatures, and a real local stdio fixture remain unverified at runtime. The debug desktop executable builds and starts successfully. No external MCP server or paid AI provider was contacted, and no release was published for this change.
+
 ## v0.3.1 shortcut capture, updater permissions, and search states
 
 Added native Windows keyboard capture before system-menu and Windows-key handling, including consumed key releases, cancellation, already-held modifiers, and parser-compatible bindings. Granted only the resource-close capability required by updater cleanup.

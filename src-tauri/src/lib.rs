@@ -1,4 +1,5 @@
 mod ai;
+mod ai_tools;
 mod appearance;
 mod applications;
 mod calculator;
@@ -6,6 +7,7 @@ mod commands;
 mod elevation;
 mod files;
 mod launcher;
+mod mcp;
 mod modules;
 mod search;
 #[cfg(windows)]
@@ -112,6 +114,7 @@ pub fn run() {
         )
         .setup(|app| {
             app.manage(ai::AiState::default());
+            app.manage(mcp::McpState::for_app(app.handle()));
             app.manage(modules::Modules::load(app.handle()));
             app.manage(applications::ApplicationCatalog::default());
             app.manage(files::FileIndex::new(app.handle()));
@@ -174,6 +177,12 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             ai::open_ai_link,
+            mcp::get_mcp_servers,
+            mcp::save_mcp_server,
+            mcp::remove_mcp_server,
+            mcp::connect_mcp_server,
+            mcp::disconnect_mcp_server,
+            mcp::mcp_approve_tool,
             ai::get_ai_config,
             ai::save_ai_config,
             ai::ask_ai,
@@ -207,6 +216,14 @@ pub fn run() {
             files::choose_file_folder,
             files::run_shell_command,
         ])
-        .run(tauri::generate_context!())
-        .expect("Could not start Mycast");
+        .build(tauri::generate_context!())
+        .expect("Could not start Mycast")
+        .run(|app, event| {
+            if matches!(
+                event,
+                tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit
+            ) {
+                app.state::<mcp::McpState>().stop();
+            }
+        });
 }
